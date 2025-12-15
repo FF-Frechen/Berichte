@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  backend:
+    image: feuerwehr-backend:latest
+    container_name: feuerwehr-backend
+    restart: unless-stopped
+    user: "0:0"
+    environment:
+      - DB_PATH=/app/data/feuerwehr.db
+      - PDF_PATH=/config/pdfs
+      - NODE_ENV=production
+    volumes:
+      # Datenbank
+      - feuerwehr-data:/app/data
+      # Komplettes Einsatzdoku-Verzeichnis mounten (für .env und PDFs)
+      - /home/login/Einsatzdoku:/config
+    networks:
+      - feuerwehr-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  nginx:
+    image: feuerwehr-frontend:latest
+    container_name: feuerwehr-nginx
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      backend:
+        condition: service_started
+    networks:
+      - feuerwehr-network
+
+networks:
+  feuerwehr-network:
+    driver: bridge
+
+volumes:
+  feuerwehr-data:
+    driver: local

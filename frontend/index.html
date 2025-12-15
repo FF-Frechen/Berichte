@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Feuerwehr - Hauptmenü</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 20px;
+      max-width: 800px;
+      margin: 0 auto;
+      background-color: #f5f5f5;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+    }
+
+    .container {
+      background-color: white;
+      padding: 40px;
+      border-radius: 8px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      text-align: center;
+      width: 100%;
+    }
+
+    h1 {
+      color: #d62828;
+      margin-bottom: 40px;
+      font-size: 28px;
+    }
+
+    .menu-buttons {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      max-width: 400px;
+      margin: 0 auto;
+    }
+
+    .menu-button {
+      padding: 20px 30px;
+      background-color: #003049;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 18px;
+      text-decoration: none;
+      display: block;
+      transition: background-color 0.3s, transform 0.1s;
+    }
+
+    .menu-button:hover {
+      background-color: #001d3d;
+      transform: translateY(-2px);
+    }
+
+    .menu-button:active {
+      transform: translateY(0);
+    }
+
+    .info-text {
+      margin-top: 30px;
+      padding: 15px;
+      background-color: #e7f3ff;
+      border-radius: 5px;
+      font-size: 14px;
+      color: #333;
+      border-left: 4px solid #003049;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Feuerwehr Dokumentation</h1>
+    <div class="menu-buttons">
+      <a href="input_doku.html" class="menu-button">Anwesenheitsliste Einsatz</a>
+      <a href="anwesenheit.html" class="menu-button">Anwesenheitsliste Dienste</a>
+    </div>
+    <div class="info-text">
+      Namenliste Stand 04.09.2025
+    </div>
+  </div>
+</body>
+</html>

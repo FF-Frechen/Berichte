@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Feuerwehr Einsatz-Dokumentation</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/signature_pad/4.1.5/signature_pad.umd.min.js"></script>
+  
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 20px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .header-container {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+      margin-bottom: 30px;
+      align-items: center;
+    }
+
+    h1 {
+      color: #d62828;
+      text-align: center;
+      margin: 0;
+      padding: 10px 0;
+    }
+
+    .header-button {
+      padding: 10px 15px;
+      background-color: #003049;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 14px;
+      width: 100%;
+      box-sizing: border-box;
+    }
+
+    @media (min-width: 1000px) {
+      .header-container {
+        grid-template-columns: auto 1fr auto;
+        gap: 20px;
+        margin-bottom: 20px;
+      }
+      .header-button {
+        width: auto;
+        white-space: nowrap;
+      }
+    }
+
+    .header-button:hover {
+      background-color: #001d3d;
+    }
+    
+    .container {
+      background-color: #f8f9fa;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+    
+    .einsatz-info {
+      background-color: #e7f3ff;
+      padding: 15px;
+      border-radius: 5px;
+      margin-bottom: 20px;
+      border-left: 4px solid #003049;
+    }
+    
+    .einsatz-info h3 {
+      margin-top: 0;
+      color: #003049;
+    }
+    
+    .einsatz-info p {
+      margin: 5px 0;
+    }
+    
+    .fahrzeug-auswahl {
+      margin-bottom: 20px;
+      padding: 15px;
+      background-color: #e9ecef;
+      border-radius: 5px;
+    }
+    
+    .fahrzeug-option {
+      display: flex;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    
+    .fahrzeug-option input[type="checkbox"] {
+      margin-right: 10px;
+    }
+    
+    .fahrzeug-option label {
+      margin-right: 20px;
+    }
+    
+    .fahrzeug-section {
+      margin-bottom: 30px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      padding: 15px;
+      background-color: white;
+    }
+    
+    .fahrzeug-section h3 {
+      margin-top: 0;
+      color: #003049;
+    }
+    
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 20px;
+    }
+    
+    table, th, td {
+      border: 1px solid #ddd;
+    }
+    
+    th {
+      background-color: #f2f2f2;
+      padding: 12px;
+      text-align: left;
+    }
+    
+    td {
+      padding: 12px;
+      position: relative;
+    }
+    
+    input[type="text"], input[type="number"] {
+      width: 100%;
+      padding: 8px;
+      box-sizing: border-box;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+    
+    .autocomplete-items {
+      position: absolute;
+      border: 1px solid #d4d4d4;
+      border-top: none;
+      z-index: 99;
+      top: 100%;
+      left: 0;
+      right: 0;
+      max-height: 200px;
+      overflow-y: auto;
+      background-color: white;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+    
+    .autocomplete-items div {
+      padding: 10px;
+      cursor: pointer;
+      background-color: #fff;
+      border-bottom: 1px solid #d4d4d4;
+    }
+    
+    .autocomplete-items div:hover {
+      background-color: #e9e9e9;
+    }
+    
+    .autocomplete-active {
+      background-color: #003049 !important;
+      color: #ffffff;
+    }
+    
+    .signature-image {
+      max-height: 100px;
+      width: auto;
+      display: block;
+      margin-top: 10px;
+    }
+    
+    button {
+      padding: 10px 15px;
+      background-color: #003049;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 16px;
+      margin: 5px;
+    }
+    
+    button:hover {
+      background-color: #001d3d;
+    }
+    
+    button:disabled {
+      background-color: #6c757d;
+      cursor: not-allowed;
+    }
+    
+    .action-buttons {
+      display: flex;
+      justify-content: center;
+      margin-top: 20px;
+    }
+    
+    .signature-modal {
+      display: none;
+      position: fixed;
+      z-index: 1000;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0,0,0,0.7);
+    }
+    
+    .modal-content {
+      background-color: #fff;
+      margin: 10% auto;
+      padding: 20px;
+      border-radius: 8px;
+      width: 80%;
+      max-width: 600px;
+    }
+    
+    .close {
+      color: #aaa;
+      float: right;
+      font-size: 28px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    
+    .close:hover {
+      color: black;
+    }
+    
+    .signature-pad {
+      border: 1px solid #000;
+      border-radius: 4px;
+      width: 100%;
+      height: 150px;
+      background-color: #fff;
+      touch-action: none;
+    }
+    
+    .buttons {
+      margin-top: 15px;
+      display: flex;
+      justify-content: space-between;
+    }
+    
+    .hidden {
+      display: none;
+    }
+    
+    .name-cell {
+      width: 40%;
+    }
+    
+    .signature-cell {
+      width: 40%;
+    }
+    
+    .pdf-item {
+      padding: 8px;
+      margin: 5px 0;
+      background: white;
+      border-radius: 4px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    .pdf-actions {
+      display: flex;
+      gap: 5px;
+      align-items: center;
+    }
+    
+    .pdf-actions a, .pdf-actions button {
+      padding: 5px 10px;
+      border-radius: 3px;
+      text-align: center;
+      min-width: 80px;
+      font-size: 14px;
+    }
+    
+    .pdf-actions a {
+      background-color: #003049;
+      color: white;
+      text-decoration: none;
+      display: inline-block;
+    }
+    
+    .pdf-actions button {
+      margin: 0;
+      font-size: 14px;
+    }
+    
+    .pa-label {
+      font-size: 10px;
+      color: #666;
+      display: block;
+      margin-top: 3px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header-container">
+      <button class="header-button" onclick="window.location.href='input_doku.html'">← Zurück</button>
+      <h1>Feuerwehr Einsatz-Dokumentation</h1>
+      <div></div>
+    </div>
+
+    <div class="einsatz-info">
+      <h3>Einsatzinformationen</h3>
+      <p><strong>Datum:</strong> <span id="info-datum"></span> <strong>Uhrzeit:</strong> <span id="info-uhrzeit"></span></p>
+      <p><strong>Einsatznummer:</strong> <span id="info-einsatznummer"></span></p>
+      <p><strong>Einsatzstelle:</strong> <span id="info-einsatzstelle"></span></p>
+      <p><strong>Einsatzleiter:</strong> <span id="info-einsatzleiter"></span></p>
+      
+      <div id="pdf-versions" style="margin-top: 15px; padding: 10px; background-color: #f8f9fa; border-radius: 5px; display: none;">
+        <h4 style="margin-top: 0;">Gespeicherte PDF-Versionen:</h4>
+        <div id="pdf-list"></div>
+      </div>
+    </div>
+    
+    <h2>Welche Fahrzeuge sind ausgerückt? <span class="pa-label">PA = Tragezeit Atemschutz in Minuten</span></h2>
+    <div class="fahrzeug-auswahl">
+      <div class="fahrzeug-option">
+        <input type="checkbox" id="fahrzeug-hlf20-1" value="hlf20-1">
+        <label for="fahrzeug-hlf20-1">FRE1/HLF20/1</label>
+        <input type="checkbox" id="bereit-hlf20-1">
+        <label for="bereit-hlf20-1">Bereitstellung</label>
+      </div>
+      <div class="fahrzeug-option">
+        <input type="checkbox" id="fahrzeug-hlf20-2" value="hlf20-2">
+        <label for="fahrzeug-hlf20-2">FRE1/HLF20/2</label>
+        <input type="checkbox" id="bereit-hlf20-2">
+        <label for="bereit-hlf20-2">Bereitstellung</label>
+      </div>
+      <div class="fahrzeug-option">
+        <input type="checkbox" id="fahrzeug-lf20-1" value="lf20-1">
+        <label for="fahrzeug-lf20-1">FRE1/LF20/1</label>
+        <input type="checkbox" id="bereit-lf20-1">
+        <label for="bereit-lf20-1">Bereitstellung</label>
+      </div>
+      <div class="fahrzeug-option">
+        <input type="checkbox" id="fahrzeug-ptlf4000-1" value="ptlf4000-1">
+        <label for="fahrzeug-ptlf4000-1">FRE1/PTLF4000/1</label>
+        <input type="checkbox" id="bereit-ptlf4000-1">
+        <label for="bereit-ptlf4000-1">Bereitstellung</label>
+      </div>
+      <div class="fahrzeug-option">
+        <input type="checkbox" id="fahrzeug-elw-1" value="elw-1">
+        <label for="fahrzeug-elw-1">FRE1/ELW/1</label>
+        <input type="checkbox" id="bereit-elw-1">
+        <label for="bereit-elw-1">Bereitstellung</label>
+      </div>
+      <div class="fahrzeug-option">
+        <input type="checkbox" id="fahrzeug-mtf-1" value="mtf-1">
+        <label for="fahrzeug-mtf-1">FRE1/MTF/1</label>
+        <input type="checkbox" id="bereit-mtf-1">
+        <label for="bereit-mtf-1">Bereitstellung</label>
+      </div>
+      <div class="fahrzeug-option">
+        <input type="checkbox" id="fahrzeug-mtf-2" value="mtf-2">
+        <label for="fahrzeug-mtf-2">FRE1/MTF/2</label>
+        <input type="checkbox" id="bereit-mtf-2">
+        <label for="bereit-mtf-2">Bereitstellung</label>
+      </div>
+      <div class="fahrzeug-option">
+        <input type="checkbox" id="fahrzeug-kdow-1" value="kdow-1">
+        <label for="fahrzeug-kdow-1">FRE1/KDOW/1</label>
+        <input type="checkbox" id="bereit-kdow-1">
+        <label for="bereit-kdow-1">Bereitstellung</label>
+      </div>
+      <div class="fahrzeug-option">
+        <input type="checkbox" id="fahrzeug-lkw-1" value="lkw-1">
+        <label for="fahrzeug-lkw-1">FRE1/LKW/1</label>
+        <input type="checkbox" id="bereit-lkw-1">
+        <label for="bereit-lkw-1">Bereitstellung</label>
+      </div>
+      <div class="fahrzeug-option">
+        <input type="checkbox" id="fahrzeug-dlk23-1" value="dlk23-1">
+        <label for="fahrzeug-dlk23-1">FRE1/DLK23/1</label>
+        <input type="checkbox" id="bereit-dlk23-1">
+        <label for="bereit-dlk23-1">Bereitstellung</label>
+      </div>
+      <div class="fahrzeug-option">
+        <input type="checkbox" id="fahrzeug-wlf26-1" value="wlf26-1">
+        <label for="fahrzeug-wlf26-1">FRE1/WLF26/1</label>
+        <input type="checkbox" id="bereit-wlf26-1">
+        <label for="bereit-wlf26-1">Bereitstellung</label>
+      </div>
+      <div class="fahrzeug-option">
+        <input type="checkbox" id="fahrzeug-gw-1" value="gw-1">
+        <label for="fahrzeug-gw-1">FRE1/GW/1</label>
+        <input type="checkbox" id="bereit-gw-1">
+        <label for="bereit-gw-1">Bereitstellung</label>
+      </div>
+      <div class="fahrzeug-option">
+        <input type="checkbox" id="fahrzeug-kks-1" value="kks-1">
+        <label for="fahrzeug-kks-1">FRE1/KKS/1</label>
+        <input type="checkbox" id="bereit-kks-1">
+        <label for="bereit-kks-1">Bereitstellung</label>
+      </div>
+    </div>
+    
+    <div id="fahrzeug-container"></div>
+    
+    <div class="action-buttons">
+      <button onclick="window.location.href='input_doku.html'">← Zurück zu Einsatzdaten</button>
+      <button onclick="saveData()">Zwischenspeichern</button>
+      <button onclick="generatePDF()" style="background-color: #198754;">PDF erstellen & auf Server speichern</button>
+      <button id="send-current-version-btn" onclick="sendCurrentVersion()" style="background-color: #198754; display: none;">📧 Version X verschicken</button>
+    </div>
+  </div>
+  
+  <div id="signature-modal" class="signature-modal">
+    <div class="modal-content">
+      <span class="close" onclick="closeSignatureModal()">&times;</span>
+      <h3>Unterschrift für: <span id="current-position"></span></h3>
+      <div>
+        <canvas id="signature-pad" class="signature-pad"></canvas>
+        <div class="buttons">
+          <button onclick="clearSignature()">Löschen</button>
+          <button onclick="saveSignature()">Unterschrift speichern</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/api/client.js"></script>
+</body>
+</html>

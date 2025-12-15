@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  backend:
+    build: ./backend
+    container_name: feuerwehr-backend
+    restart: unless-stopped
+    env_file:
+      - .env.smtp
+      - .env.namen
+    environment:
+      - DB_PATH=/app/data/feuerwehr.db
+      - PDF_PATH=/config/pdfs
+    volumes:
+      - ./data:/app/data
+      - .:/config
+    networks:
+      - feuerwehr-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  nginx:
+    image: nginx:alpine
+    container_name: feuerwehr-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./frontend:/usr/share/nginx/html:ro
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - backend
+    networks:
+      - feuerwehr-network
+
+networks:
+  feuerwehr-network:
+    driver: bridge
+
+volumes:
+  data:

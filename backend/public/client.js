@@ -1,0 +1,820 @@
+// Feuerwehr Einsatz-Dokumentation Client
+// Optimierte Version ohne Frontend-PDF-Generierung
+
+let namensListe = [];
+let currentEinsatzId = null;
+let signaturePad;
+let currentFahrzeug;
+let currentPosition;
+let currentRow;
+let currentVersionToSend = null;
+let currentVersionPdfId = null;
+
+const SERVER_URL = '/api';
+
+const besatzungen = {
+  'hlf20-1': Array(8).fill(null).map((_, i) => ({
+    position: ["Gruppenführer", "Maschinist", "Angriffstrupp - Führer", "Angriffstrupp - Mann", 
+               "Wassertrupp - Führer", "Wassertrupp - Mann", "Schlauchtrupp - Führer", 
+               "Schlauchtrupp - Mann"][i],
+    name: "", signature: null, pa: false, paMinuten: ""
+  })),
+  'hlf20-2': Array(8).fill(null).map((_, i) => ({
+    position: ["Gruppenführer", "Maschinist", "Angriffstrupp - Führer", "Angriffstrupp - Mann", 
+               "Wassertrupp - Führer", "Wassertrupp - Mann", "Schlauchtrupp - Führer", 
+               "Schlauchtrupp - Mann"][i],
+    name: "", signature: null, pa: false, paMinuten: ""
+  })),
+  'lf20-1': Array(9).fill(null).map((_, i) => ({
+    position: ["Gruppenführer", "Maschinist", "Angriffstrupp - Führer", "Angriffstrupp - Mann", 
+               "Wassertrupp - Führer", "Wassertrupp - Mann", "Schlauchtrupp - Führer", 
+               "Schlauchtrupp - Mann", "Melder"][i],
+    name: "", signature: null, pa: false, paMinuten: ""
+  })),
+  'ptlf4000-1': Array(3).fill(null).map((_, i) => ({
+    position: ["Maschinist", "Truppführer", "Truppmann"][i],
+    name: "", signature: null, pa: false, paMinuten: ""
+  })),
+  'elw-1': Array(3).fill(null).map((_, i) => ({
+    position: ["Einsatzleiter", "Fahrer", "Melder"][i],
+    name: "", signature: null, pa: false, paMinuten: ""
+  })),
+  'mtf-1': Array(9).fill(null).map((_, i) => ({
+    position: ["Truppführer", "Maschinist", "Truppmann 1", "Truppmann 2", "Truppmann 3", "Truppmann 4", "Truppmann 5", "Truppmann 6", "Truppmann 7"][i],
+    name: "", signature: null, pa: false, paMinuten: ""
+  })),
+  'mtf-2': Array(9).fill(null).map((_, i) => ({
+    position: ["Truppführer", "Maschinist", "Truppmann 1", "Truppmann 2", "Truppmann 3", "Truppmann 4", "Truppmann 5", "Truppmann 6", "Truppmann 7"][i],
+    name: "", signature: null, pa: false, paMinuten: ""
+  })),
+  'kdow-1': Array(4).fill(null).map((_, i) => ({
+    position: ["Fahrer", "Mitfahrer 1", "Mitfahrer 2", "Mitfahrer 3"][i],
+    name: "", signature: null, pa: false, paMinuten: ""
+  })),
+  'lkw-1': Array(3).fill(null).map((_, i) => ({
+    position: ["Maschinist", "Truppführer", "Truppmann"][i],
+    name: "", signature: null, pa: false, paMinuten: ""
+  })),
+  'dlk23-1': Array(3).fill(null).map((_, i) => ({
+    position: ["Maschinist", "Truppführer", "Truppmann"][i],
+    name: "", signature: null, pa: false, paMinuten: ""
+  })),
+  'wlf26-1': Array(3).fill(null).map((_, i) => ({
+    position: ["Maschinist", "Truppführer", "Truppmann"][i],
+    name: "", signature: null, pa: false, paMinuten: ""
+  })),
+  'gw-1': Array(3).fill(null).map((_, i) => ({
+    position: ["Maschinist", "Truppführer", "Truppmann"][i],
+    name: "", signature: null, pa: false, paMinuten: ""
+  })),
+  'kks-1': Array(5).fill(null).map((_, i) => ({
+    position: ["Lagedienstführer", "Disponent 1", "Disponent 2", "Lagekarte", "ZBV"][i],
+    name: "", signature: null, pa: false, paMinuten: ""
+  }))
+};
+
+const fahrzeugNamen = {
+  'hlf20-1': "FRE1/HLF20/1 - Hilfeleistungslöschfahrzeug",
+  'hlf20-2': "FRE1/HLF20/2 - Hilfeleistungslöschfahrzeug",
+  'lf20-1': "FRE1/LF20/1 - Löschfahrzeug",
+  'ptlf4000-1': "FRE1/PTLF4000/1 - Pulverlöschfahrzeug",
+  'elw-1': "FRE1/ELW/1 - Einsatzleitwagen",
+  'mtf-1': "FRE1/MTF/1 - Mannschaftstransportfahrzeug",
+  'mtf-2': "FRE1/MTF/2 - Mannschaftstransportfahrzeug",
+  'kdow-1': "FRE1/KDOW/1 - Kommandowagen",
+  'lkw-1': "FRE1/LKW/1 - Lastkraftwagen",
+  'dlk23-1': "FRE1/DLK23/1 - Drehleiter",
+  'wlf26-1': "FRE1/WLF26/1 - Wechselladerfahrzeug",
+  'gw-1': "FRE1/GW/1 - Gerätewagen",
+  'kks-1': "FRE1/KKS/1 - Kreisleitstelle"
+};
+
+// API-Funktionen
+async function ladeNamen() {
+  try {
+    const response = await fetch(`${SERVER_URL}/namen`);
+    if (!response.ok) throw new Error('Datei nicht gefunden');
+    const data = await response.json();
+    namensListe = data.namen || [];
+    console.log(`${namensListe.length} Namen erfolgreich geladen`);
+  } catch (error) {
+    console.error('Fehler beim Laden der Namen:', error);
+  }
+}
+
+async function loadEinsatzDaten() {
+  const params = new URLSearchParams(window.location.search);
+  const einsatznummer = params.get('einsatznummer');
+  
+  if (!einsatznummer) {
+    alert('Keine Einsatznummer gefunden.');
+    window.location.href = 'input_doku.html';
+    return;
+  }
+  
+  currentEinsatzId = einsatznummer;
+  
+  try {
+    const response = await fetch(`${SERVER_URL}/einsatz/${einsatznummer}`);
+    
+    if (!response.ok) {
+      const localData = localStorage.getItem(`einsatz_${einsatznummer}`);
+      if (localData) {
+        const data = JSON.parse(localData);
+        applyEinsatzData(data);
+      } else {
+        initializeNewEinsatz(einsatznummer, params);
+      }
+      return;
+    }
+    
+    const data = await response.json();
+    
+    if (!data.einsatz || (!data.fahrzeuge.length && !data.besatzungen.length)) {
+      const localData = localStorage.getItem(`einsatz_${einsatznummer}`);
+      if (localData) {
+        applyEinsatzData(JSON.parse(localData));
+      } else {
+        initializeNewEinsatz(einsatznummer, params);
+      }
+      return;
+    }
+    
+    applyEinsatzData(data);
+    
+    // Nur PDF-Versionen laden wenn bereits welche existieren
+    loadPDFVersions(currentEinsatzId);
+    
+  } catch (error) {
+    console.error('Fehler beim Laden:', error);
+    const localData = localStorage.getItem(`einsatz_${einsatznummer}`);
+    if (localData) {
+      applyEinsatzData(JSON.parse(localData));
+    } else {
+      alert('Fehler beim Laden der Daten.');
+      window.location.href = 'input_doku.html';
+    }
+  }
+}
+
+function initializeNewEinsatz(einsatznummer, params) {
+  currentEinsatzId = einsatznummer;
+  
+  document.getElementById('info-einsatznummer').textContent = einsatznummer;
+  document.getElementById('info-datum').textContent = params.get('datum') || new Date().toLocaleDateString('de-DE');
+  document.getElementById('info-uhrzeit').textContent = params.get('uhrzeit') || new Date().toLocaleTimeString('de-DE', {hour: '2-digit', minute: '2-digit'});
+  document.getElementById('info-einsatzstelle').textContent = params.get('einsatzstelle') || '';
+  document.getElementById('info-einsatzleiter').textContent = params.get('einsatzleiter') || '-';
+  
+  updateFahrzeugTables();
+}
+
+function applyEinsatzData(data) {
+  const einsatz = data.einsatz;
+  const fahrzeuge = data.fahrzeuge || [];
+  const besatzungenData = data.besatzungen || [];
+  
+  currentEinsatzId = einsatz.einsatznummer;
+  
+  document.getElementById('info-einsatznummer').textContent = einsatz.einsatznummer;
+  document.getElementById('info-datum').textContent = einsatz.datum;
+  document.getElementById('info-uhrzeit').textContent = einsatz.uhrzeit;
+  document.getElementById('info-einsatzstelle').textContent = einsatz.einsatzstelle;
+  document.getElementById('info-einsatzleiter').textContent = einsatz.einsatzleiter || '-';
+  
+  fahrzeuge.forEach(f => {
+    const checkbox = document.getElementById(`fahrzeug-${f.fahrzeug}`);
+    if (checkbox) checkbox.checked = true;
+    const bereitCheckbox = document.getElementById(`bereit-${f.fahrzeug}`);
+    if (bereitCheckbox) bereitCheckbox.checked = f.bereitstellung;
+  });
+  
+  besatzungenData.forEach(b => {
+    const member = besatzungen[b.fahrzeug]?.find(m => m.position === b.position);
+    if (member) {
+      member.name = b.name || "";
+      member.signature = b.signature || null;
+      member.pa = b.pa || false;
+      member.paMinuten = b.paMinuten || "";
+    }
+  });
+  
+  updateFahrzeugTables();
+}
+
+function updateFahrzeugTables() {
+  const fahrzeugContainer = document.getElementById("fahrzeug-container");
+  const selectedFahrzeuge = getSelectedFahrzeuge();
+  fahrzeugContainer.innerHTML = "";
+  
+  selectedFahrzeuge.forEach(fahrzeugTyp => {
+    createFahrzeugSection(fahrzeugTyp);
+  });
+}
+
+function createFahrzeugSection(fahrzeugTyp) {
+  const fahrzeugContainer = document.getElementById("fahrzeug-container");
+  const fahrzeugSection = document.createElement("div");
+  fahrzeugSection.className = "fahrzeug-section";
+  
+  const fahrzeugTitle = document.createElement("h3");
+  fahrzeugTitle.textContent = getFahrzeugName(fahrzeugTyp);
+  fahrzeugSection.appendChild(fahrzeugTitle);
+  
+  const table = document.createElement("table");
+  const thead = document.createElement("thead");
+  const headerRow = document.createElement("tr");
+  
+  ["Position", "Name", "Unterschrift", "PA"].forEach(text => {
+    const th = document.createElement("th");
+    th.textContent = text;
+    if (text === "Name") th.className = "name-cell";
+    if (text === "Unterschrift") th.className = "signature-cell";
+    if (text === "PA") th.style.width = "80px";
+    headerRow.appendChild(th);
+  });
+  
+  thead.appendChild(headerRow);
+  table.appendChild(thead);
+  
+  const tbody = document.createElement("tbody");
+  besatzungen[fahrzeugTyp].forEach((member, index) => {
+    const row = document.createElement("tr");
+    row.id = `row-${fahrzeugTyp}-${index}`;
+    
+    const posCell = document.createElement("td");
+    posCell.textContent = member.position;
+    row.appendChild(posCell);
+    
+    const nameCell = document.createElement("td");
+    nameCell.style.position = "relative";
+    const nameInput = document.createElement("input");
+    nameInput.type = "text";
+    nameInput.placeholder = "Name eingeben";
+    nameInput.value = member.name;
+    nameInput.autocomplete = "off";
+    nameInput.addEventListener("change", (e) => {
+      besatzungen[fahrzeugTyp][index].name = e.target.value;
+      saveDataLocal();
+    });
+    nameCell.appendChild(nameInput);
+    row.appendChild(nameCell);
+    autocomplete(nameInput, namensListe);
+    
+    const signatureCell = document.createElement("td");
+    const signButton = document.createElement("button");
+    signButton.textContent = member.signature ? "Neu unterschreiben" : "Unterschreiben";
+    signButton.addEventListener("click", () => {
+      openSignatureModal(fahrzeugTyp, index, member.position, row);
+    });
+    const signatureImage = document.createElement("img");
+    signatureImage.id = `signature-img-${fahrzeugTyp}-${index}`;
+    signatureImage.className = "signature-image hidden";
+    signatureImage.style.display = "none";
+    if (member.signature) {
+      signatureImage.src = member.signature;
+      signatureImage.classList.remove("hidden");
+      signatureImage.style.display = "block";
+    }
+    signatureCell.appendChild(signButton);
+    signatureCell.appendChild(signatureImage);
+    row.appendChild(signatureCell);
+    
+    const paCell = document.createElement("td");
+    const paCheckbox = document.createElement("input");
+    paCheckbox.type = "checkbox";
+    paCheckbox.checked = member.pa;
+    paCheckbox.addEventListener("change", (e) => {
+      besatzungen[fahrzeugTyp][index].pa = e.target.checked;
+      const paInput = document.getElementById(`pa-input-${fahrzeugTyp}-${index}`);
+      paInput.style.display = e.target.checked ? "block" : "none";
+      if (e.target.checked) {
+        paInput.required = true;
+        paInput.focus();
+      } else {
+        paInput.required = false;
+      }
+      saveDataLocal();
+    });
+    const paInput = document.createElement("input");
+    paInput.type = "number";
+    paInput.id = `pa-input-${fahrzeugTyp}-${index}`;
+    paInput.placeholder = "Min";
+    paInput.style.width = "60px";
+    paInput.style.marginTop = "5px";
+    paInput.style.display = member.pa ? "block" : "none";
+    paInput.value = member.paMinuten;
+    paInput.addEventListener("change", (e) => {
+      besatzungen[fahrzeugTyp][index].paMinuten = e.target.value;
+      saveDataLocal();
+    });
+    paInput.addEventListener("blur", (e) => {
+      const checkbox = paCell.querySelector('input[type="checkbox"]');
+      if (checkbox.checked && (e.target.value === '' || e.target.value === null)) {
+        alert('⚠️ Bitte geben Sie die PA-Zeit in Minuten an (0 ist erlaubt)!');
+        e.target.focus();
+      }
+    });
+    paCell.appendChild(paCheckbox);
+    paCell.appendChild(paInput);
+    row.appendChild(paCell);
+    
+    tbody.appendChild(row);
+  });
+  
+  table.appendChild(tbody);
+  fahrzeugSection.appendChild(table);
+  fahrzeugContainer.appendChild(fahrzeugSection);
+}
+
+function getSelectedFahrzeuge() {
+  const selected = [];
+  ['hlf20-1', 'hlf20-2', 'lf20-1', 'ptlf4000-1', 'elw-1', 'mtf-1', 'mtf-2', 'kdow-1', 'lkw-1', 'dlk23-1', 'wlf26-1', 'gw-1', 'kks-1'].forEach(id => {
+    if (document.getElementById(`fahrzeug-${id}`).checked) selected.push(id);
+  });
+  return selected;
+}
+
+function getFahrzeugName(typ) {
+  return fahrzeugNamen[typ];
+}
+
+function saveDataLocal() {
+  const dataToSave = {
+    einsatz: {
+      einsatznummer: currentEinsatzId,
+      datum: document.getElementById('info-datum').textContent,
+      uhrzeit: document.getElementById('info-uhrzeit').textContent,
+      einsatzstelle: document.getElementById('info-einsatzstelle').textContent,
+      einsatzleiter: document.getElementById('info-einsatzleiter').textContent
+    },
+    fahrzeuge: getSelectedFahrzeuge().map(f => ({
+      fahrzeug: f,
+      name: f,
+      bereitstellung: document.getElementById(`bereit-${f}`)?.checked || false
+    })),
+    besatzungen: []
+  };
+  
+  getSelectedFahrzeuge().forEach(fahrzeugTyp => {
+    besatzungen[fahrzeugTyp].forEach(member => {
+      dataToSave.besatzungen.push({
+        fahrzeug: fahrzeugTyp,
+        position: member.position,
+        name: member.name || "",
+        signature: member.signature || "",
+        pa: member.pa || false,
+        paMinuten: member.paMinuten || ""
+      });
+    });
+  });
+  
+  localStorage.setItem(`einsatz_${currentEinsatzId}`, JSON.stringify(dataToSave));
+}
+
+// Hauptfunktion: Speichern der Daten
+async function saveData() {
+  saveDataLocal();
+  
+  const besatzungenArray = [];
+  getSelectedFahrzeuge().forEach(fahrzeugTyp => {
+    besatzungen[fahrzeugTyp].forEach(member => {
+      besatzungenArray.push({
+        fahrzeug: fahrzeugTyp,
+        position: member.position,
+        name: member.name || "",
+        signature: member.signature || "",
+        pa: member.pa || false,
+        paMinuten: member.paMinuten || ""
+      });
+    });
+  });
+  
+  const einsatzData = {
+    einsatznummer: currentEinsatzId,
+    datum: document.getElementById('info-datum').textContent,
+    uhrzeit: document.getElementById('info-uhrzeit').textContent,
+    einsatzstelle: document.getElementById('info-einsatzstelle').textContent,
+    einsatzleiter: document.getElementById('info-einsatzleiter').textContent,
+    fahrzeuge: getSelectedFahrzeuge().map(f => ({
+      fahrzeug: f,
+      name: f,
+      bereitstellung: document.getElementById(`bereit-${f}`)?.checked || false
+    })),
+    besatzungen: besatzungenArray
+  };
+  
+  try {
+    const response = await fetch(`${SERVER_URL}/einsatz`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(einsatzData)
+    });
+    
+    if (response.ok) {
+      console.log('Daten erfolgreich gespeichert');
+      return true;
+    } else {
+      const error = await response.json();
+      console.error(`Fehler beim Speichern: ${error.error}`);
+      return false;
+    }
+  } catch (error) {
+    console.error('Fehler beim Speichern:', error);
+    alert('Netzwerkfehler beim Speichern. Daten wurden lokal gespeichert.');
+    return false;
+  }
+}
+
+// OPTIMIERT: PDF-Generierung nur noch über Backend-API
+async function generatePDF() {
+  // Erst Daten speichern
+  const saved = await saveData();
+  if (saved) {
+    console.log('Daten wurden gespeichert, starte PDF-Generierung...');
+  }
+  
+  const einsatzleiter = document.getElementById('info-einsatzleiter').textContent;
+  
+  // Zeige Ladeanzeige
+  const generateButton = document.querySelector('button[onclick="generatePDF()"]');
+  const originalText = generateButton ? generateButton.textContent : '';
+  if (generateButton) {
+    generateButton.textContent = '⏳ PDF wird erstellt...';
+    generateButton.disabled = true;
+  }
+  
+  try {
+    // Rufe Backend-API auf für PDF-Generierung
+    const response = await fetch(`${SERVER_URL}/pdf/generate/${currentEinsatzId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        createdBy: einsatzleiter || 'System'
+      })
+    });
+    
+    if (generateButton) {
+      generateButton.textContent = originalText;
+      generateButton.disabled = false;
+    }
+    
+    if (response.ok) {
+      const result = await response.json();
+      alert(`✓ PDF erfolgreich erstellt!\n\nVersion: ${result.version}\nDatei: ${result.filename}`);
+      
+      // Speichere die aktuelle Version für den Send-Button
+      currentVersionToSend = result.version;
+      currentVersionPdfId = result.id;
+      
+      // Zeige den "Version X verschicken" Button
+      const sendBtn = document.getElementById('send-current-version-btn');
+      if (sendBtn) {
+        sendBtn.textContent = `📧 Version ${result.version} verschicken`;
+        sendBtn.style.display = 'inline-block';
+      }
+      
+      // PDF-Liste aktualisieren
+      await loadPDFVersions(currentEinsatzId);
+    } else {
+      const error = await response.json();
+      alert(`Fehler beim Erstellen der PDF: ${error.error}`);
+    }
+  } catch (error) {
+    console.error('Fehler bei PDF-Generierung:', error);
+    
+    if (generateButton) {
+      generateButton.textContent = originalText;
+      generateButton.disabled = false;
+    }
+    
+    alert('Fehler beim Erstellen der PDF: ' + error.message);
+  }
+}
+
+// PDF-Versionen laden
+async function loadPDFVersions(einsatznummer) {
+  try {
+    const response = await fetch(`${SERVER_URL}/pdf/list/${einsatznummer}`);
+    if (response.ok) {
+      const pdfs = await response.json();
+      const pdfVersionsDiv = document.getElementById('pdf-versions');
+      const pdfList = document.getElementById('pdf-list');
+      
+      if (pdfs.length === 0) {
+        pdfVersionsDiv.style.display = 'none';
+      } else {
+        pdfVersionsDiv.style.display = 'block';
+        pdfList.innerHTML = pdfs.map(pdf => {
+          let created_at_utc = pdf.created_at;
+          if (created_at_utc && !created_at_utc.endsWith('Z')) {
+            created_at_utc = created_at_utc.replace(' ', 'T') + 'Z';
+          }
+          const date = new Date(created_at_utc).toLocaleString('de-DE', { timeZone: 'Europe/Berlin' });
+
+          const emailButton = pdf.email_sent === 1 
+            ? '<button disabled style="background-color: #6c757d; cursor: not-allowed;">✅ Versendet</button>'
+            : `<button onclick="sendPDFEmail(${pdf.id}, ${pdf.version})" style="background-color: #198754;">📧 E-Mail senden</button>`;
+          
+          return `<div class="pdf-item">
+            <div><strong>Version ${pdf.version}</strong><br><small>${date}${pdf.created_by ? ` - ${pdf.created_by}` : ''}</small></div>
+            <div class="pdf-actions">
+              <a href="${SERVER_URL}/pdf/file/${pdf.id}" target="_blank">Download</a>
+              ${emailButton}
+              <button onclick="deletePDF(${pdf.id}, ${pdf.version})" style="background-color: #d62828;">🗑️ Löschen</button>
+            </div>
+          </div>`;
+        }).join('');
+      }
+    }
+  } catch (error) {
+    console.error('Fehler beim Laden der PDFs:', error);
+  }
+}
+
+// PDF löschen
+async function deletePDF(pdfId, version) {
+  if (!confirm(`Möchten Sie wirklich Version ${version} löschen?\n\nDiese Aktion kann nicht rückgängig gemacht werden!`)) {
+    return;
+  }
+  const password = prompt('Bitte geben Sie das Lösch-Passwort ein:');
+  if (!password) return;
+  
+  try {
+    const response = await fetch(`${SERVER_URL}/pdf/${pdfId}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password })
+    });
+    
+    if (response.ok) {
+      alert(`Version ${version} wurde erfolgreich gelöscht.`);
+      loadPDFVersions(currentEinsatzId);
+    } else {
+      const error = await response.json();
+      alert(`Fehler: ${error.error}`);
+    }
+  } catch (error) {
+    console.error('Fehler beim Löschen:', error);
+    alert('Fehler beim Löschen der PDF.');
+  }
+}
+
+// PDF per E-Mail versenden (automatisch an konfigurierte Empfänger)
+async function sendPDFEmail(pdfId, version) {
+  if (!confirm(`E-Mail für Version ${version} an die konfigurierten Empfänger senden?`)) {
+    return;
+  }
+  
+  try {
+    const response = await fetch(`${SERVER_URL}/pdf/email`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pdfId })
+    });
+    
+    if (response.ok) {
+      const result = await response.json();
+      alert(`✅ E-Mail wurde erfolgreich an ${result.recipients} Empfänger versendet!`);
+      
+      // Wenn die versendete Version die aktuelle ist, verstecke den unteren Button
+      if (currentVersionToSend === version) {
+        const sendBtn = document.getElementById('send-current-version-btn');
+        if (sendBtn) {
+          sendBtn.style.display = 'none';
+        }
+      }
+      
+      // Liste neu laden um Button-Status zu aktualisieren
+      loadPDFVersions(currentEinsatzId);
+    } else {
+      const error = await response.json();
+      alert(`Fehler beim E-Mail-Versand: ${error.error}`);
+    }
+  } catch (error) {
+    console.error('Fehler beim E-Mail-Versand:', error);
+    alert('Fehler beim E-Mail-Versand.');
+  }
+}
+
+// Funktion für den unteren "Version X verschicken" Button
+async function sendCurrentVersion() {
+  if (!currentVersionPdfId || !currentVersionToSend) {
+    alert('Keine Version zum Versenden verfügbar.');
+    return;
+  }
+  
+  if (!confirm(`E-Mail für Version ${currentVersionToSend} an die konfigurierten Empfänger senden?`)) {
+    return;
+  }
+  
+  try {
+    const response = await fetch(`${SERVER_URL}/pdf/email`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pdfId: currentVersionPdfId })
+    });
+    
+    if (response.ok) {
+      const result = await response.json();
+      alert(`✅ E-Mail wurde erfolgreich an ${result.recipients} Empfänger versendet!`);
+      
+      // Verstecke den Button nach erfolgreichem Versand
+      const sendBtn = document.getElementById('send-current-version-btn');
+      if (sendBtn) {
+        sendBtn.style.display = 'none';
+      }
+      
+      // Liste neu laden um Button-Status zu aktualisieren
+      loadPDFVersions(currentEinsatzId);
+    } else {
+      const error = await response.json();
+      alert(`Fehler beim E-Mail-Versand: ${error.error}`);
+    }
+  } catch (error) {
+    console.error('Fehler beim E-Mail-Versand:', error);
+    alert('Fehler beim E-Mail-Versand.');
+  }
+}
+
+// Autocomplete-Funktionalität
+function autocomplete(inp, arr) {
+  let currentFocus;
+  
+  inp.addEventListener("input", function(e) {
+    const val = this.value;
+    closeAllLists();
+    if (!val) return false;
+    currentFocus = -1;
+    
+    const autocompleteList = document.createElement("div");
+    autocompleteList.setAttribute("class", "autocomplete-items");
+    this.parentNode.appendChild(autocompleteList);
+    
+    for (let i = 0; i < arr.length; i++) {
+      if (arr[i].toLowerCase().includes(val.toLowerCase())) {
+        const item = document.createElement("div");
+        const startIndex = arr[i].toLowerCase().indexOf(val.toLowerCase());
+        item.innerHTML = arr[i].substr(0, startIndex);
+        item.innerHTML += "<strong>" + arr[i].substr(startIndex, val.length) + "</strong>";
+        item.innerHTML += arr[i].substr(startIndex + val.length);
+        item.innerHTML += "<input type='hidden' value='" + arr[i] + "'>";
+        
+        item.addEventListener("click", function(e) {
+          inp.value = this.getElementsByTagName("input")[0].value;
+          const event = new Event('change');
+          inp.dispatchEvent(event);
+          closeAllLists();
+        });
+        
+        autocompleteList.appendChild(item);
+      }
+    }
+  });
+  
+  inp.addEventListener("keydown", function(e) {
+    let x = this.parentNode.querySelector(".autocomplete-items");
+    if (x) x = x.getElementsByTagName("div");
+    
+    if (e.keyCode === 40) {
+      currentFocus++;
+      addActive(x);
+    } else if (e.keyCode === 38) {
+      currentFocus--;
+      addActive(x);
+    } else if (e.keyCode === 13) {
+      e.preventDefault();
+      if (currentFocus > -1) {
+        if (x) x[currentFocus].click();
+      }
+    }
+  });
+  
+  function addActive(x) {
+    if (!x) return false;
+    removeActive(x);
+    if (currentFocus >= x.length) currentFocus = 0;
+    if (currentFocus < 0) currentFocus = (x.length - 1);
+    x[currentFocus].classList.add("autocomplete-active");
+  }
+  
+  function removeActive(x) {
+    for (let i = 0; i < x.length; i++) {
+      x[i].classList.remove("autocomplete-active");
+    }
+  }
+}
+
+function closeAllLists(elmnt) {
+  const items = document.getElementsByClassName("autocomplete-items");
+  for (let i = 0; i < items.length; i++) {
+    if (elmnt !== items[i] && elmnt !== items[i].previousSibling) {
+      items[i].parentNode.removeChild(items[i]);
+    }
+  }
+}
+
+// Signature Modal Funktionen
+function openSignatureModal(fahrzeugTyp, index, position, row) {
+  currentFahrzeug = fahrzeugTyp;
+  currentPosition = index;
+  currentRow = row;
+  
+  document.getElementById("current-position").textContent = position;
+  document.getElementById("signature-modal").style.display = "block";
+  
+  if (signaturePad) {
+    signaturePad.clear();
+  }
+  
+  if (besatzungen[fahrzeugTyp][index].signature) {
+    signaturePad.fromDataURL(besatzungen[fahrzeugTyp][index].signature);
+  }
+  
+  resizeCanvas();
+}
+
+function closeSignatureModal() {
+  document.getElementById("signature-modal").style.display = "none";
+}
+
+function clearSignature() {
+  if (signaturePad) {
+    signaturePad.clear();
+  }
+}
+
+function saveSignature() {
+  if (signaturePad.isEmpty()) {
+    alert("Bitte unterschreiben Sie zuerst.");
+    return;
+  }
+  
+  const dataURL = signaturePad.toDataURL();
+  besatzungen[currentFahrzeug][currentPosition].signature = dataURL;
+  
+  const signatureImg = document.getElementById(`signature-img-${currentFahrzeug}-${currentPosition}`);
+  signatureImg.src = dataURL;
+  signatureImg.classList.remove("hidden");
+  signatureImg.style.display = "block";
+  
+  const signButton = currentRow.querySelector("button");
+  signButton.textContent = "Neu unterschreiben";
+  
+  saveDataLocal();
+  closeSignatureModal();
+}
+
+function initSignaturePad() {
+  const canvas = document.getElementById("signature-pad");
+  signaturePad = new SignaturePad(canvas, {
+    backgroundColor: "rgb(255, 255, 255)",
+    penColor: "rgb(0, 0, 0)"
+  });
+  
+  window.addEventListener("resize", resizeCanvas);
+  resizeCanvas();
+}
+
+function resizeCanvas() {
+  const canvas = document.getElementById("signature-pad");
+  const ratio = Math.max(window.devicePixelRatio || 1, 1);
+  canvas.width = canvas.offsetWidth * ratio;
+  canvas.height = canvas.offsetHeight * ratio;
+  canvas.getContext("2d").scale(ratio, ratio);
+  
+  if (signaturePad) {
+    const data = signaturePad.toData();
+    signaturePad.clear();
+    if (data && data.length > 0) {
+      signaturePad.fromData(data);
+    }
+  }
+}
+
+// Initialisierung beim Laden der Seite
+document.addEventListener("DOMContentLoaded", function() {
+  const checkboxes = document.querySelectorAll('.fahrzeug-option input[type="checkbox"]');
+  checkboxes.forEach(checkbox => {
+    checkbox.addEventListener("change", updateFahrzeugTables);
+  });
+  
+  initSignaturePad();
+  ladeNamen();
+  loadEinsatzDaten();
+  
+  document.addEventListener("click", function(e) {
+    closeAllLists(e.target);
+  });
+});
+
+// Globale Funktionen für onclick-Handler
+window.saveData = saveData;
+window.generatePDF = generatePDF;
+window.sendPDFEmail = sendPDFEmail;
+window.sendCurrentVersion = sendCurrentVersion;
+window.deletePDF = deletePDF;
+window.openSignatureModal = openSignatureModal;
+window.closeSignatureModal = closeSignatureModal;
+window.clearSignature = clearSignature;
+window.saveSignature = saveSignature;
