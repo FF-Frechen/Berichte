@@ -1,37 +1,47 @@
 # 🐳 Portainer Deployment Guide
 
-Anleitung zum Deployen des Feuerwehr Berichte Systems über Portainer.
+Anleitung zum Deployen des Feuerwehr Berichte Systems über Portainer mit Git Auto-Build.
 
 ## 📋 Voraussetzungen
 
 - Portainer installiert und läuft
-- Docker Images gebaut und verfügbar:
-  - `feuerwehr-backend:latest`
-  - `feuerwehr-frontend:latest`
+- GitHub Fine-Grained Token mit Repository-Zugriff (siehe [GITHUB-TOKEN-GUIDE.md](./GITHUB-TOKEN-GUIDE.md))
 
-## 🚀 Deployment-Schritte
+## 🚀 Deployment mit Git Auto-Build
 
-### 1. Stack erstellen
+Portainer pullt die Dateien direkt von GitHub und baut die Images automatisch.
+
+### Schritt 1: Stack aus Git Repository erstellen
 
 1. In Portainer einloggen
 2. Zu **Stacks** navigieren
 3. **Add stack** klicken
-4. Stack-Name eingeben (z.B. `feuerwehr-berichte`)
+4. Stack-Name eingeben: `feuerwehr-berichte`
+5. **Repository** als Build-Methode auswählen
 
-### 2. Stack-Konfiguration einfügen
+### Schritt 2: Git Repository konfigurieren
 
-Kopiere den Inhalt von `portainer-stack.yml` in den Web Editor.
+```
+Repository URL: https://github.com/FF-Frechen/Berichte
+Repository reference: refs/heads/main
 
-### 3. Umgebungsvariablen konfigurieren
+✓ Authentication aktivieren
+Username: dein-github-username
+Personal Access Token: ghp_xxxxxxxxxxxx
+
+Compose path: portainer-stack.yml
+```
+
+> **💡 Token erstellen:** Der Token braucht nur `Contents: Read` Permission - siehe [GITHUB-TOKEN-GUIDE.md](./GITHUB-TOKEN-GUIDE.md)
+
+### Schritt 3: Umgebungsvariablen konfigurieren
 
 Scrolle zu **Environment variables** und füge folgende Variablen hinzu:
 
-#### Option A: Mit Host-Pfad (Bind Mount)
-
-Wenn du ein bestehendes Verzeichnis auf dem Host verwenden möchtest:
+#### Variante 1: Mit Host-Pfad (Bind Mount)
 
 ```env
-# Pfad zum Einsatzdoku-Verzeichnis auf dem Host
+# Pfad zum Datenverzeichnis auf dem Host
 CONFIG_PATH=/pfad/zum/verzeichnis/Einsatzdoku
 
 # SMTP-Konfiguration
@@ -52,9 +62,7 @@ EMAIL_RECIPIENTS_ANWESENHEIT=empfaenger1@example.com
 NAMEN=Max Mustermann,Erika Musterfrau,Hans Schmidt
 ```
 
-#### Option B: Mit Docker Named Volume (Empfohlen)
-
-Wenn du Docker Volumes verwenden möchtest (portabel zwischen Servern):
+#### Variante 2: Mit Docker Named Volume (Empfohlen)
 
 ```env
 # CONFIG_PATH nicht setzen (nutzt automatisch 'feuerwehr-config' Volume)
@@ -77,13 +85,33 @@ EMAIL_RECIPIENTS_ANWESENHEIT=empfaenger1@example.com
 NAMEN=Max Mustermann,Erika Musterfrau,Hans Schmidt
 ```
 
-> **Hinweis:** Wenn `CONFIG_PATH` nicht gesetzt ist, wird automatisch ein Docker Volume namens `feuerwehr-config` verwendet.
+> **📝 Template:** Alle benötigten Variablen findest du in `.env.portainer.example`
 
-### 4. Stack deployen
+### Schritt 4: Stack deployen
 
-Klicke auf **Deploy the stack**.
+1. Klicke auf **Deploy the stack**
+2. ⏱️ **Erster Build dauert 5-10 Minuten**
+   - Portainer pullt das Repository von GitHub
+   - Portainer baut Backend-Image (~3-5 Min)
+   - Portainer baut Frontend-Image (~1-2 Min)
+   - Build-Logs werden in Echtzeit angezeigt
+3. Nach erfolgreichem Build starten die Container automatisch
+4. Fertig! ✅
 
-## 🔧 Portspezifischer Zugriff
+### Schritt 5: Updates deployen
+
+Um auf eine neue Version zu aktualisieren:
+
+1. Code auf GitHub pushen (neues Feature, Bugfix, etc.)
+2. In Portainer: Stack öffnen
+3. **Pull and redeploy** klicken
+4. Portainer pullt die neueste Version von GitHub, baut neu und startet die Container
+
+**Das war's!** Keine manuellen Builds, keine Image-Registry nötig.
+
+---
+
+## 🔧 Zugriff
 
 Nach dem Deployment ist die Anwendung unter **Port 8080** erreichbar:
 
@@ -91,118 +119,85 @@ Nach dem Deployment ist die Anwendung unter **Port 8080** erreichbar:
 http://server-ip:8080
 ```
 
+---
+
 ## 📦 Volumes verwalten
 
 ### PDFs im Named Volume ablegen
 
-Wenn du Option B verwendest und PDFs ins Volume kopieren möchtest:
+Wenn du Variante 2 (Named Volume) verwendest:
 
 ```bash
 # Volume inspizieren
 docker volume inspect feuerwehr-berichte_feuerwehr-config
 
-# Temporären Container starten um Dateien zu kopieren
+# Dateien ins Volume kopieren
 docker run --rm -v feuerwehr-berichte_feuerwehr-config:/data -v $(pwd):/host alpine sh -c "mkdir -p /data/pdfs && cp /host/*.pdf /data/pdfs/"
 ```
 
 ### PDFs aus dem Named Volume abrufen
 
 ```bash
-# PDFs aus dem Volume kopieren
 docker run --rm -v feuerwehr-berichte_feuerwehr-config:/data -v $(pwd):/host alpine cp -r /data/pdfs /host/
 ```
+
+---
 
 ## 🔄 Stack aktualisieren
 
 ### Environment-Variablen ändern
 
-1. Zum Stack navigieren
-2. **Editor** klicken
-3. Variablen anpassen
-4. **Update the stack** klicken
+1. Stack öffnen → **Editor**
+2. Variablen anpassen
+3. **Update the stack**
 
-### Images aktualisieren
+### Code-Updates deployen
 
-```bash
-# Neue Images bauen und in Registry pushen
-docker build -t feuerwehr-backend:latest ./backend
-docker build -t feuerwehr-frontend:latest -f nginx/Dockerfile .
+1. Code auf GitHub pushen
+2. In Portainer: Stack → **Pull and redeploy**
+3. Fertig! ✅
 
-# In Portainer: Stack → Pull and redeploy
-```
+---
 
 ## 🔍 Troubleshooting
 
 ### Logs prüfen
 
-In Portainer:
-1. Zu **Containers** navigieren
-2. Container auswählen (`feuerwehr-backend` oder `feuerwehr-nginx`)
-3. **Logs** klicken
-
-### Container Status prüfen
-
-In Portainer unter **Stacks** → Stack-Name → **Containers** siehst du:
-- ✅ Grün: Container läuft
-- 🔴 Rot: Container gestoppt/fehler
+Portainer → **Containers** → Container auswählen → **Logs**
 
 ### Häufige Probleme
 
-#### "Cannot connect to backend"
-- Prüfe ob Backend-Container läuft
-- Prüfe Backend-Logs auf Fehler
-- Stelle sicher, dass Health-Check erfolgreich ist
+**"Build failed"**
+- Prüfe Build-Logs in Portainer
+- Stelle sicher dass GitHub Token korrekt ist
+- Prüfe Internetverbindung
 
-#### "SMTP Error" im Backend
-- Überprüfe SMTP-Zugangsdaten in Environment-Variablen
-- Prüfe ob Port 587 (oder dein SMTP-Port) erreichbar ist
+**"Cannot connect to backend"**
+- Prüfe Backend-Logs
+- Warte bis Health-Check erfolgreich (~60 Sek)
+- Prüfe Environment-Variablen
 
-#### "Volume not found"
-- Stelle sicher, dass Volume-Name korrekt ist
-- Bei Named Volumes: automatisch beim Stack-Start erstellt
-- Bei Bind Mounts: Verzeichnis muss existieren
-
-## 🔒 Sicherheitshinweise
-
-1. **Niemals** sensitive Daten in die `portainer-stack.yml` schreiben
-2. Alle Secrets nur über **Environment Variables** in Portainer setzen
-3. Verwende starke Passwörter für `DELETE_PASSWORD`
-4. Bei Produktivbetrieb:
-   - HTTPS einrichten (z.B. mit Traefik/Caddy)
-   - Authentifizierung implementieren
-   - Firewall-Regeln konfigurieren
-
-## 📊 Monitoring
-
-### Healthcheck Status
-
-Der Backend-Container hat einen Health-Check, der alle 30 Sekunden läuft:
-- **Healthy**: Backend antwortet auf `/api/health`
-- **Unhealthy**: Backend antwortet nicht
-
-Status in Portainer unter **Containers** sichtbar.
-
-## 🔄 Migration zwischen Servern
-
-### Variante 1: Mit Named Volumes
-
-```bash
-# Auf altem Server: Volume exportieren
-docker run --rm -v feuerwehr-berichte_feuerwehr-data:/data -v $(pwd):/backup alpine tar czf /backup/data-backup.tar.gz -C /data .
-docker run --rm -v feuerwehr-berichte_feuerwehr-config:/data -v $(pwd):/backup alpine tar czf /backup/config-backup.tar.gz -C /data .
-
-# Backups zum neuen Server kopieren
-scp *.tar.gz user@neuer-server:/pfad/
-
-# Auf neuem Server: Stack deployen, dann Volumes importieren
-docker run --rm -v neuer-stack_feuerwehr-data:/data -v $(pwd):/backup alpine tar xzf /backup/data-backup.tar.gz -C /data
-docker run --rm -v neuer-stack_feuerwehr-config:/data -v $(pwd):/backup alpine tar xzf /backup/config-backup.tar.gz -C /data
-```
-
-### Variante 2: Mit Bind Mounts
-
-Einfach das Verzeichnis auf den neuen Server kopieren und `CONFIG_PATH` entsprechend setzen.
+**"SMTP Error"**
+- Überprüfe SMTP-Zugangsdaten
+- Prüfe Port-Erreichbarkeit
 
 ---
 
-**Bei Fragen oder Problemen:** Siehe Hauptdokumentation in `README.md`
+## 🔒 Sicherheit
+
+- **GitHub Token** sicher aufbewahren, niemals committen
+- **Secrets** nur über Environment Variables setzen
+- **Starke Passwörter** verwenden
+- Für Produktion: HTTPS, Auth, Firewall, Backups
+
+---
+
+## 🔗 Weitere Dokumentation
+
+- [GITHUB-TOKEN-GUIDE.md](./GITHUB-TOKEN-GUIDE.md) - Token Setup
+- [README.md](./README.md) - Übersicht
+- [.env.portainer.example](./.env.portainer.example) - Variablen Template
+
+---
+
+**Bei Fragen:** Siehe README.md

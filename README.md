@@ -108,23 +108,34 @@ docker-compose ps
 
 ## 📦 Portainer Deployment
 
-Das Projekt kann auch über Portainer deployed werden.
+Das Projekt kann direkt aus GitHub in Portainer deployed werden! 🚀
 
 **Für detaillierte Anweisungen siehe:** [PORTAINER.md](./PORTAINER.md)
 
-### Kurzübersicht:
+### 🔥 Empfohlene Methode: Git Auto-Build
 
-1. In Portainer einen neuen Stack erstellen
-2. Inhalt von `portainer-stack.yml` einfügen
-3. Environment-Variablen setzen:
-   - `CONFIG_PATH` - Pfad zum Datenverzeichnis (optional, nutzt sonst Docker Volume)
-   - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` - E-Mail-Konfiguration
-   - `DELETE_PASSWORD` - Passwort zum Löschen von PDFs
-   - `EMAIL_RECIPIENTS` - E-Mail-Empfänger
-   - `NAMEN` - Komma-getrennte Liste der Feuerwehrmitglieder
-4. Stack deployen
+Portainer pullt die Dateien direkt von GitHub und baut die Images automatisch.
 
-Die Konfiguration ist nun **universell verwendbar** und nicht an einen bestimmten Serverpfad gebunden!
+1. **In Portainer:** Stacks → Add stack → **Repository**
+
+2. **Repository konfigurieren:**
+   ```
+   Repository URL: https://github.com/FF-Frechen/Berichte
+   Branch: refs/heads/main
+   Compose path: portainer-stack.yml
+   Authentication: GitHub Token (siehe GITHUB-TOKEN-GUIDE.md)
+   ```
+
+3. **Environment-Variablen setzen** (siehe `.env.portainer.example`)
+
+4. **Deploy the stack** - fertig! ✅
+
+**Vorteile:**
+- ✅ Keine manuellen Builds nötig
+- ✅ Updates mit einem Klick (**Pull and redeploy**)
+- ✅ Vollautomatischer Build aus GitHub
+
+Die Konfiguration ist **universell verwendbar** und nicht an einen bestimmten Serverpfad gebunden!
 
 ## 🔒 Sicherheitshinweise
 
