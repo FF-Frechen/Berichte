@@ -27,17 +27,17 @@ Ein Docker-basiertes System zur Verwaltung von Einsatzberichten und Anwesenheits
 
 2. **Umgebungsvariablen konfigurieren:**
 
-   Kopiere die Beispieldateien und fülle sie mit deinen Daten:
+   Kopiere die Beispieldatei und fülle sie mit deinen Daten:
    ```bash
-   cp .env.smtp.example .env.smtp
-   cp .env.namen.example .env.namen
-   cp .env.fahrzeuge.example .env.fahrzeuge
+   cp .env.example .env
    ```
 
-   Bearbeite die Dateien:
-   - `.env.smtp` - SMTP-Zugangsdaten für E-Mail-Versand
-   - `.env.namen` - Liste der Feuerwehrmitglieder (Komma-getrennt)
-   - `.env.fahrzeuge` - Fahrzeugkonfiguration mit Funktionen
+   Bearbeite die `.env` Datei mit deinen Daten:
+   - SMTP-Zugangsdaten für E-Mail-Versand
+   - E-Mail-Empfänger
+   - Passwörter
+   - Liste der Feuerwehrmitglieder (Komma-getrennt)
+   - Fahrzeugkonfiguration mit Funktionen
 
 3. **Docker Container starten:**
    ```bash
@@ -45,7 +45,7 @@ Ein Docker-basiertes System zur Verwaltung von Einsatzberichten und Anwesenheits
    ```
 
 4. **Anwendung öffnen:**
-   
+
    Öffne deinen Browser und navigiere zu: `http://localhost`
 
 ## 📁 Projektstruktur
@@ -64,48 +64,42 @@ Berichte/
 ├── nginx/               # NGINX Konfiguration
 │   └── nginx.conf       # Reverse Proxy Config
 ├── docker-compose.yml   # Docker Orchestrierung
-├── .env.smtp            # SMTP Konfiguration (nicht im Repo!)
-└── .env.namen           # Namensliste (nicht im Repo!)
+└── .env                 # Konfiguration (nicht im Repo!)
 ```
 
 ## ⚙️ Konfiguration
 
-### SMTP-Einstellungen (.env.smtp)
+Alle Einstellungen befinden sich in der `.env` Datei:
 
 ```env
+# SMTP-Konfiguration
 SMTP_HOST=smtp.example.com
 SMTP_PORT=587
 SMTP_SECURE=false
 SMTP_USER=deine-email@example.com
 SMTP_PASS=dein-passwort
+
+# Sicherheit
 DELETE_PASSWORD=pdf-lösch-passwort
+
+# E-Mail-Empfänger
 EMAIL_RECIPIENTS=empfaenger1@example.com,empfaenger2@example.com
 EMAIL_RECIPIENTS_ANWESENHEIT=empfaenger1@example.com
-```
 
-### Namensliste (.env.namen)
-
-```env
+# Namensliste
 NAMEN=Max Mustermann,Erika Musterfrau,Hans Schmidt
-```
 
-### Fahrzeugkonfiguration (.env.fahrzeuge)
-
-Die Fahrzeuge und ihre Funktionen werden in `.env.fahrzeuge` konfiguriert. Die Reihenfolge der Fahrzeuge in der Datei bestimmt die Reihenfolge auf der Webseite.
-
-**Format:**
-```env
-# Fahrzeug 1: HLF 20 /1
+# Fahrzeugkonfiguration (Beispiel für ein Fahrzeug)
 VEHICLE_1_ID=hlf20-1
 VEHICLE_1_NAME=FRE 1 / HLF 20 /1
 VEHICLE_1_DISPLAY_NAME=FRE1/HLF20/1 - Hilfeleistungslöschfahrzeug
-VEHICLE_1_FUNCTIONS=Gruppenführer,Maschinist,Angriffstrupp - Führer,Angriffstrupp - Mann,...
-
-# Fahrzeug 2: HLF 20 /2
-VEHICLE_2_ID=hlf20-2
-VEHICLE_2_NAME=FRE 1 / HLF 20 /2
-...
+VEHICLE_1_FUNCTIONS=Gruppenführer,Maschinist,Angriffstrupp - Führer,...
+# ... weitere Fahrzeuge (siehe .env.example)
 ```
+
+### Fahrzeugkonfiguration
+
+Die Fahrzeuge und ihre Funktionen werden direkt in der `.env` konfiguriert. Die Reihenfolge der Fahrzeuge in der Datei bestimmt die Reihenfolge auf der Webseite.
 
 **Eigenschaften:**
 - `VEHICLE_X_ID` - Eindeutige ID (intern verwendet)
@@ -118,6 +112,8 @@ VEHICLE_2_NAME=FRE 1 / HLF 20 /2
 - Fahrzeuge entfernen: Entsprechenden Block löschen und Nummern anpassen
 - Reihenfolge ändern: Blöcke verschieben (Nummern beibehalten)
 - Funktionen anpassen: `FUNCTIONS` Zeile bearbeiten
+
+Siehe `.env.example` für die vollständige Konfiguration aller 13 Standard-Fahrzeuge.
 
 ## 🔧 Docker Befehle
 
@@ -158,7 +154,7 @@ Portainer pullt die Dateien direkt von GitHub und baut die Images automatisch.
    Authentication: GitHub Token (siehe GITHUB-TOKEN-GUIDE.md)
    ```
 
-3. **Environment-Variablen setzen** (siehe `.env.portainer.example`)
+3. **Environment-Variablen setzen** (siehe `.env.example`)
 
 4. **Deploy the stack** - fertig! ✅
 
@@ -171,8 +167,8 @@ Die Konfiguration ist **universell verwendbar** und nicht an einen bestimmten Se
 
 ## 🔒 Sicherheitshinweise
 
-- **Niemals** `.env.smtp` oder `.env.namen` in Git committen!
-- `.gitignore` schützt diese Dateien automatisch
+- **Niemals** `.env` in Git committen!
+- `.gitignore` schützt diese Datei automatisch
 - Verwende starke Passwörter für `DELETE_PASSWORD`
 - Ändere regelmäßig die SMTP-Zugangsdaten
 
@@ -189,7 +185,7 @@ docker-compose restart
 ```
 
 ### E-Mail-Versand funktioniert nicht
-- Prüfe SMTP-Zugangsdaten in `.env.smtp`
+- Prüfe SMTP-Zugangsdaten in `.env`
 - Prüfe Firewall-Einstellungen (Port 587)
 - Kontrolliere Backend-Logs: `docker-compose logs backend`
 

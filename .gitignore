@@ -1,6 +1,7 @@
-# Umgebungsvariablen mit sensiblen Daten 
-.env 
-.env.* 
+# Umgebungsvariablen mit sensiblen Daten
+.env
+.env.*
+!.env.example
 !.env.*.example 
  
 # Git-Setup-Dateien 
