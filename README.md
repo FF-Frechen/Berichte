@@ -26,16 +26,17 @@ Ein Docker-basiertes System zur Verwaltung von Einsatzberichten und Anwesenheits
    ```
 
 2. **Umgebungsvariablen konfigurieren:**
-   
-   Kopiere die Beispieldateien und fülle sie mit deinen Daten:
+
+   Kopiere die Beispieldatei und fülle sie mit deinen Daten:
    ```bash
-   cp .env.smtp.example .env.smtp
-   cp .env.namen.example .env.namen
+   cp .env.example .env
    ```
-   
-   Bearbeite die Dateien:
-   - `.env.smtp` - SMTP-Zugangsdaten für E-Mail-Versand
-   - `.env.namen` - Liste der Feuerwehrmitglieder (Komma-getrennt)
+
+   Bearbeite die `.env` Datei mit deinen Daten:
+   - SMTP-Zugangsdaten für E-Mail-Versand
+   - E-Mail-Empfänger
+   - Passwörter
+   - Liste der Feuerwehrmitglieder (Komma-getrennt)
 
 3. **Docker Container starten:**
    ```bash
@@ -62,30 +63,33 @@ Berichte/
 ├── nginx/               # NGINX Konfiguration
 │   └── nginx.conf       # Reverse Proxy Config
 ├── docker-compose.yml   # Docker Orchestrierung
-├── .env.smtp            # SMTP Konfiguration (nicht im Repo!)
-└── .env.namen           # Namensliste (nicht im Repo!)
+└── .env                 # Konfiguration (nicht im Repo!)
 ```
 
 ## ⚙️ Konfiguration
 
-### SMTP-Einstellungen (.env.smtp)
+Alle Einstellungen befinden sich in der `.env` Datei:
 
 ```env
+# SMTP-Konfiguration
 SMTP_HOST=smtp.example.com
 SMTP_PORT=587
 SMTP_SECURE=false
 SMTP_USER=deine-email@example.com
 SMTP_PASS=dein-passwort
+
+# Sicherheit
 DELETE_PASSWORD=pdf-lösch-passwort
+
+# E-Mail-Empfänger
 EMAIL_RECIPIENTS=empfaenger1@example.com,empfaenger2@example.com
 EMAIL_RECIPIENTS_ANWESENHEIT=empfaenger1@example.com
-```
 
-### Namensliste (.env.namen)
-
-```env
+# Namensliste
 NAMEN=Max Mustermann,Erika Musterfrau,Hans Schmidt
 ```
+
+> **💡 Tipp:** Diese Datei wird automatisch von `docker-compose.yml` geladen.
 
 ## 🔧 Docker Befehle
 
@@ -139,8 +143,8 @@ Die Konfiguration ist **universell verwendbar** und nicht an einen bestimmten Se
 
 ## 🔒 Sicherheitshinweise
 
-- **Niemals** `.env.smtp` oder `.env.namen` in Git committen!
-- `.gitignore` schützt diese Dateien automatisch
+- **Niemals** `.env` in Git committen!
+- `.gitignore` schützt diese Datei automatisch
 - Verwende starke Passwörter für `DELETE_PASSWORD`
 - Ändere regelmäßig die SMTP-Zugangsdaten
 

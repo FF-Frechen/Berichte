@@ -5,12 +5,22 @@ services:
     build: ./backend
     container_name: feuerwehr-backend
     restart: unless-stopped
-    env_file:
-      - .env.smtp
-      - .env.namen
     environment:
       - DB_PATH=/app/data/feuerwehr.db
       - PDF_PATH=/config/pdfs
+      # SMTP-Konfiguration
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_SECURE=${SMTP_SECURE:-false}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASS=${SMTP_PASS}
+      # Sicherheit
+      - DELETE_PASSWORD=${DELETE_PASSWORD}
+      # E-Mail-Empfänger
+      - EMAIL_RECIPIENTS=${EMAIL_RECIPIENTS}
+      - EMAIL_RECIPIENTS_ANWESENHEIT=${EMAIL_RECIPIENTS_ANWESENHEIT}
+      # Namensliste
+      - NAMEN=${NAMEN}
     volumes:
       - ./data:/app/data
       - .:/config
