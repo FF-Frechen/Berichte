@@ -10,11 +10,22 @@ services:
       - DB_PATH=/app/data/feuerwehr.db
       - PDF_PATH=/config/pdfs
       - NODE_ENV=production
+      # SMTP-Konfiguration (in Portainer als Stack-Variablen setzen!)
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_SECURE=${SMTP_SECURE:-false}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASS=${SMTP_PASS}
+      - DELETE_PASSWORD=${DELETE_PASSWORD}
+      - EMAIL_RECIPIENTS=${EMAIL_RECIPIENTS}
+      - EMAIL_RECIPIENTS_ANWESENHEIT=${EMAIL_RECIPIENTS_ANWESENHEIT}
+      # Namensliste (in Portainer als Stack-Variable setzen!)
+      - NAMEN=${NAMEN}
     volumes:
       # Datenbank
       - feuerwehr-data:/app/data
-      # Komplettes Einsatzdoku-Verzeichnis mounten (für .env und PDFs)
-      - /home/login/Einsatzdoku:/config
+      # PDFs (verwendbar mit Named Volume oder Host-Pfad)
+      - ${CONFIG_PATH:-feuerwehr-config}:/config
     networks:
       - feuerwehr-network
     healthcheck:
@@ -42,4 +53,6 @@ networks:
 
 volumes:
   feuerwehr-data:
+    driver: local
+  feuerwehr-config:
     driver: local

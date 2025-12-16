@@ -108,12 +108,23 @@ docker-compose ps
 
 ## 📦 Portainer Deployment
 
-Das Projekt kann auch über Portainer deployed werden:
+Das Projekt kann auch über Portainer deployed werden.
+
+**Für detaillierte Anweisungen siehe:** [PORTAINER.md](./PORTAINER.md)
+
+### Kurzübersicht:
 
 1. In Portainer einen neuen Stack erstellen
 2. Inhalt von `portainer-stack.yml` einfügen
-3. Environment-Variablen setzen
+3. Environment-Variablen setzen:
+   - `CONFIG_PATH` - Pfad zum Datenverzeichnis (optional, nutzt sonst Docker Volume)
+   - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` - E-Mail-Konfiguration
+   - `DELETE_PASSWORD` - Passwort zum Löschen von PDFs
+   - `EMAIL_RECIPIENTS` - E-Mail-Empfänger
+   - `NAMEN` - Komma-getrennte Liste der Feuerwehrmitglieder
 4. Stack deployen
+
+Die Konfiguration ist nun **universell verwendbar** und nicht an einen bestimmten Serverpfad gebunden!
 
 ## 🔒 Sicherheitshinweise
 
