@@ -5,7 +5,7 @@ Anleitung zum Deployen des Feuerwehr Berichte Systems über Portainer mit Git Au
 ## 📋 Voraussetzungen
 
 - Portainer installiert und läuft
-- GitHub Fine-Grained Token mit Repository-Zugriff (siehe [GITHUB-TOKEN-GUIDE.md](./GITHUB-TOKEN-GUIDE.md))
+- GitHub Fine-Grained Token mit `Contents: Read` Permission (siehe Schritt 2)
 
 ## 🚀 Deployment mit Git Auto-Build
 
@@ -32,7 +32,7 @@ Personal Access Token: ghp_xxxxxxxxxxxx
 Compose path: portainer-stack.yml
 ```
 
-> **💡 Token erstellen:** Der Token braucht nur `Contents: Read` Permission - siehe [GITHUB-TOKEN-GUIDE.md](./GITHUB-TOKEN-GUIDE.md)
+> **💡 Token erstellen:** GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token → Permission: `Contents: Read` für dieses Repository
 
 ### Schritt 3: Umgebungsvariablen konfigurieren
 
@@ -85,7 +85,7 @@ EMAIL_RECIPIENTS_ANWESENHEIT=empfaenger1@example.com
 NAMEN=Max Mustermann,Erika Musterfrau,Hans Schmidt
 ```
 
-> **📝 Template:** Alle benötigten Variablen findest du in `.env.portainer.example`
+> **📝 Template:** Alle benötigten Variablen findest du in `.env.example` im Repository
 
 ### Schritt 4: Stack deployen
 
@@ -194,9 +194,8 @@ Portainer → **Containers** → Container auswählen → **Logs**
 
 ## 🔗 Weitere Dokumentation
 
-- [GITHUB-TOKEN-GUIDE.md](./GITHUB-TOKEN-GUIDE.md) - Token Setup
 - [README.md](./README.md) - Übersicht
-- [.env.portainer.example](./.env.portainer.example) - Variablen Template
+- [.env.example](./.env.example) - Variablen Template
 
 ---
 

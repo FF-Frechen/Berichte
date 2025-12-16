@@ -127,10 +127,10 @@ Portainer pullt die Dateien direkt von GitHub und baut die Images automatisch.
    Repository URL: https://github.com/FF-Frechen/Berichte
    Branch: refs/heads/main
    Compose path: portainer-stack.yml
-   Authentication: GitHub Token (siehe GITHUB-TOKEN-GUIDE.md)
+   Authentication: GitHub Token (Contents: Read Permission)
    ```
 
-3. **Environment-Variablen setzen** (siehe `.env.portainer.example`)
+3. **Environment-Variablen setzen** (siehe `.env.example`)
 
 4. **Deploy the stack** - fertig! ✅
 
@@ -161,7 +161,7 @@ docker-compose restart
 ```
 
 ### E-Mail-Versand funktioniert nicht
-- Prüfe SMTP-Zugangsdaten in `.env.smtp`
+- Prüfe SMTP-Zugangsdaten in `.env`
 - Prüfe Firewall-Einstellungen (Port 587)
 - Kontrolliere Backend-Logs: `docker-compose logs backend`
 
