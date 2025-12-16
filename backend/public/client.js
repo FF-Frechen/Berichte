@@ -12,82 +12,10 @@ let currentVersionPdfId = null;
 
 const SERVER_URL = '/api';
 
-const besatzungen = {
-  'hlf20-1': Array(8).fill(null).map((_, i) => ({
-    position: ["Gruppenführer", "Maschinist", "Angriffstrupp - Führer", "Angriffstrupp - Mann", 
-               "Wassertrupp - Führer", "Wassertrupp - Mann", "Schlauchtrupp - Führer", 
-               "Schlauchtrupp - Mann"][i],
-    name: "", signature: null, pa: false, paMinuten: ""
-  })),
-  'hlf20-2': Array(8).fill(null).map((_, i) => ({
-    position: ["Gruppenführer", "Maschinist", "Angriffstrupp - Führer", "Angriffstrupp - Mann", 
-               "Wassertrupp - Führer", "Wassertrupp - Mann", "Schlauchtrupp - Führer", 
-               "Schlauchtrupp - Mann"][i],
-    name: "", signature: null, pa: false, paMinuten: ""
-  })),
-  'lf20-1': Array(9).fill(null).map((_, i) => ({
-    position: ["Gruppenführer", "Maschinist", "Angriffstrupp - Führer", "Angriffstrupp - Mann", 
-               "Wassertrupp - Führer", "Wassertrupp - Mann", "Schlauchtrupp - Führer", 
-               "Schlauchtrupp - Mann", "Melder"][i],
-    name: "", signature: null, pa: false, paMinuten: ""
-  })),
-  'ptlf4000-1': Array(3).fill(null).map((_, i) => ({
-    position: ["Maschinist", "Truppführer", "Truppmann"][i],
-    name: "", signature: null, pa: false, paMinuten: ""
-  })),
-  'elw-1': Array(3).fill(null).map((_, i) => ({
-    position: ["Einsatzleiter", "Fahrer", "Melder"][i],
-    name: "", signature: null, pa: false, paMinuten: ""
-  })),
-  'mtf-1': Array(9).fill(null).map((_, i) => ({
-    position: ["Truppführer", "Maschinist", "Truppmann 1", "Truppmann 2", "Truppmann 3", "Truppmann 4", "Truppmann 5", "Truppmann 6", "Truppmann 7"][i],
-    name: "", signature: null, pa: false, paMinuten: ""
-  })),
-  'mtf-2': Array(9).fill(null).map((_, i) => ({
-    position: ["Truppführer", "Maschinist", "Truppmann 1", "Truppmann 2", "Truppmann 3", "Truppmann 4", "Truppmann 5", "Truppmann 6", "Truppmann 7"][i],
-    name: "", signature: null, pa: false, paMinuten: ""
-  })),
-  'kdow-1': Array(4).fill(null).map((_, i) => ({
-    position: ["Fahrer", "Mitfahrer 1", "Mitfahrer 2", "Mitfahrer 3"][i],
-    name: "", signature: null, pa: false, paMinuten: ""
-  })),
-  'lkw-1': Array(3).fill(null).map((_, i) => ({
-    position: ["Maschinist", "Truppführer", "Truppmann"][i],
-    name: "", signature: null, pa: false, paMinuten: ""
-  })),
-  'dlk23-1': Array(3).fill(null).map((_, i) => ({
-    position: ["Maschinist", "Truppführer", "Truppmann"][i],
-    name: "", signature: null, pa: false, paMinuten: ""
-  })),
-  'wlf26-1': Array(3).fill(null).map((_, i) => ({
-    position: ["Maschinist", "Truppführer", "Truppmann"][i],
-    name: "", signature: null, pa: false, paMinuten: ""
-  })),
-  'gw-1': Array(3).fill(null).map((_, i) => ({
-    position: ["Maschinist", "Truppführer", "Truppmann"][i],
-    name: "", signature: null, pa: false, paMinuten: ""
-  })),
-  'kks-1': Array(5).fill(null).map((_, i) => ({
-    position: ["Lagedienstführer", "Disponent 1", "Disponent 2", "Lagekarte", "ZBV"][i],
-    name: "", signature: null, pa: false, paMinuten: ""
-  }))
-};
-
-const fahrzeugNamen = {
-  'hlf20-1': "FRE1/HLF20/1 - Hilfeleistungslöschfahrzeug",
-  'hlf20-2': "FRE1/HLF20/2 - Hilfeleistungslöschfahrzeug",
-  'lf20-1': "FRE1/LF20/1 - Löschfahrzeug",
-  'ptlf4000-1': "FRE1/PTLF4000/1 - Pulverlöschfahrzeug",
-  'elw-1': "FRE1/ELW/1 - Einsatzleitwagen",
-  'mtf-1': "FRE1/MTF/1 - Mannschaftstransportfahrzeug",
-  'mtf-2': "FRE1/MTF/2 - Mannschaftstransportfahrzeug",
-  'kdow-1': "FRE1/KDOW/1 - Kommandowagen",
-  'lkw-1': "FRE1/LKW/1 - Lastkraftwagen",
-  'dlk23-1': "FRE1/DLK23/1 - Drehleiter",
-  'wlf26-1': "FRE1/WLF26/1 - Wechselladerfahrzeug",
-  'gw-1': "FRE1/GW/1 - Gerätewagen",
-  'kks-1': "FRE1/KKS/1 - Kreisleitstelle"
-};
+// Fahrzeugkonfiguration - wird beim Start vom Backend geladen
+let besatzungen = {};
+let fahrzeugNamen = {};
+let vehicleOrder = []; // Speichert die Reihenfolge der Fahrzeuge
 
 // API-Funktionen
 async function ladeNamen() {
@@ -99,6 +27,47 @@ async function ladeNamen() {
     console.log(`${namensListe.length} Namen erfolgreich geladen`);
   } catch (error) {
     console.error('Fehler beim Laden der Namen:', error);
+  }
+}
+
+async function ladeFahrzeuge() {
+  try {
+    const response = await fetch(`${SERVER_URL}/fahrzeuge`);
+    if (!response.ok) throw new Error('Fahrzeugkonfiguration nicht gefunden');
+    const data = await response.json();
+
+    // Initialisiere die Fahrzeug-Objekte basierend auf der .env-Konfiguration
+    besatzungen = {};
+    fahrzeugNamen = {};
+    vehicleOrder = [];
+
+    data.vehicles.forEach(vehicle => {
+      const { id, displayName, functions } = vehicle;
+
+      // Speichere Reihenfolge
+      vehicleOrder.push(id);
+
+      // Initialisiere Besatzung mit den Funktionen
+      besatzungen[id] = functions.map(position => ({
+        position,
+        name: "",
+        signature: null,
+        pa: false,
+        paMinuten: ""
+      }));
+
+      // Speichere Display-Namen
+      fahrzeugNamen[id] = displayName;
+    });
+
+    console.log(`✓ ${data.vehicles.length} Fahrzeuge aus .env geladen`);
+
+    // Aktualisiere die UI mit den geladenen Fahrzeugen
+    updateFahrzeugCheckboxes();
+
+  } catch (error) {
+    console.error('Fehler beim Laden der Fahrzeuge:', error);
+    alert('Fehler beim Laden der Fahrzeugkonfiguration. Bitte prüfen Sie die .env.fahrzeuge Datei.');
   }
 }
 
@@ -792,17 +761,56 @@ function resizeCanvas() {
   }
 }
 
-// Initialisierung beim Laden der Seite
-document.addEventListener("DOMContentLoaded", function() {
-  const checkboxes = document.querySelectorAll('.fahrzeug-option input[type="checkbox"]');
+// Dynamisches Generieren der Fahrzeug-Checkboxen
+function updateFahrzeugCheckboxes() {
+  const container = document.getElementById('fahrzeug-auswahl-container');
+  if (!container) {
+    console.warn('Fahrzeug-Auswahl-Container nicht gefunden');
+    return;
+  }
+
+  // Leere den Container
+  container.innerHTML = '';
+
+  // Generiere Checkboxen in der Reihenfolge der .env
+  vehicleOrder.forEach(vehicleId => {
+    const displayName = fahrzeugNamen[vehicleId];
+    if (!displayName) return;
+
+    // Extrahiere Kurzname (z.B. "FRE1/HLF20/1" aus "FRE1/HLF20/1 - Hilfeleistungslöschfahrzeug")
+    const shortName = displayName.split(' - ')[0];
+
+    const optionDiv = document.createElement('div');
+    optionDiv.className = 'fahrzeug-option';
+
+    optionDiv.innerHTML = `
+      <input type="checkbox" id="fahrzeug-${vehicleId}" value="${vehicleId}">
+      <label for="fahrzeug-${vehicleId}">${shortName}</label>
+      <input type="checkbox" id="bereit-${vehicleId}">
+      <label for="bereit-${vehicleId}">Bereitstellung</label>
+    `;
+
+    container.appendChild(optionDiv);
+  });
+
+  // Event-Listener für alle Checkboxen hinzufügen
+  const checkboxes = container.querySelectorAll('input[type="checkbox"][id^="fahrzeug-"]');
   checkboxes.forEach(checkbox => {
     checkbox.addEventListener("change", updateFahrzeugTables);
   });
-  
+
+  console.log('✓ Fahrzeug-Checkboxen dynamisch generiert');
+}
+
+// Initialisierung beim Laden der Seite
+document.addEventListener("DOMContentLoaded", async function() {
   initSignaturePad();
-  ladeNamen();
-  loadEinsatzDaten();
-  
+
+  // Lade zuerst die Fahrzeuge, dann Namen, dann Einsatzdaten
+  await ladeFahrzeuge();
+  await ladeNamen();
+  await loadEinsatzDaten();
+
   document.addEventListener("click", function(e) {
     closeAllLists(e.target);
   });

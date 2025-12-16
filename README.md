@@ -26,16 +26,18 @@ Ein Docker-basiertes System zur Verwaltung von Einsatzberichten und Anwesenheits
    ```
 
 2. **Umgebungsvariablen konfigurieren:**
-   
+
    Kopiere die Beispieldateien und fülle sie mit deinen Daten:
    ```bash
    cp .env.smtp.example .env.smtp
    cp .env.namen.example .env.namen
+   cp .env.fahrzeuge.example .env.fahrzeuge
    ```
-   
+
    Bearbeite die Dateien:
    - `.env.smtp` - SMTP-Zugangsdaten für E-Mail-Versand
    - `.env.namen` - Liste der Feuerwehrmitglieder (Komma-getrennt)
+   - `.env.fahrzeuge` - Fahrzeugkonfiguration mit Funktionen
 
 3. **Docker Container starten:**
    ```bash
@@ -86,6 +88,36 @@ EMAIL_RECIPIENTS_ANWESENHEIT=empfaenger1@example.com
 ```env
 NAMEN=Max Mustermann,Erika Musterfrau,Hans Schmidt
 ```
+
+### Fahrzeugkonfiguration (.env.fahrzeuge)
+
+Die Fahrzeuge und ihre Funktionen werden in `.env.fahrzeuge` konfiguriert. Die Reihenfolge der Fahrzeuge in der Datei bestimmt die Reihenfolge auf der Webseite.
+
+**Format:**
+```env
+# Fahrzeug 1: HLF 20 /1
+VEHICLE_1_ID=hlf20-1
+VEHICLE_1_NAME=FRE 1 / HLF 20 /1
+VEHICLE_1_DISPLAY_NAME=FRE1/HLF20/1 - Hilfeleistungslöschfahrzeug
+VEHICLE_1_FUNCTIONS=Gruppenführer,Maschinist,Angriffstrupp - Führer,Angriffstrupp - Mann,...
+
+# Fahrzeug 2: HLF 20 /2
+VEHICLE_2_ID=hlf20-2
+VEHICLE_2_NAME=FRE 1 / HLF 20 /2
+...
+```
+
+**Eigenschaften:**
+- `VEHICLE_X_ID` - Eindeutige ID (intern verwendet)
+- `VEHICLE_X_NAME` - Name für PDF-Generierung (kurz)
+- `VEHICLE_X_DISPLAY_NAME` - Vollständiger Name für die Webseite
+- `VEHICLE_X_FUNCTIONS` - Komma-separierte Liste der Funktionen/Positionen
+
+**Anpassung:**
+- Fahrzeuge hinzufügen: Neuen Block mit nächster Nummer anhängen
+- Fahrzeuge entfernen: Entsprechenden Block löschen und Nummern anpassen
+- Reihenfolge ändern: Blöcke verschieben (Nummern beibehalten)
+- Funktionen anpassen: `FUNCTIONS` Zeile bearbeiten
 
 ## 🔧 Docker Befehle
 

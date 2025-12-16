@@ -53,6 +53,105 @@ if (!NAMEN_ENV) {
     process.exit(1);
 }
 
+// === FAHRZEUG-KONFIGURATION AUS .ENV ===
+// Liest alle VEHICLE_X_* Variablen und erstellt daraus die benötigten Mappings
+function loadVehiclesFromEnv() {
+    const vehicles = [];
+    const fahrzeugMapping = {};
+    const besatzungenMapping = {};
+    const fahrzeugNamenMapping = {};
+
+    // Finde alle Fahrzeug-Definitionen
+    let i = 1;
+    while (true) {
+        const id = process.env[`VEHICLE_${i}_ID`];
+        const name = process.env[`VEHICLE_${i}_NAME`];
+        const displayName = process.env[`VEHICLE_${i}_DISPLAY_NAME`];
+        const functionsStr = process.env[`VEHICLE_${i}_FUNCTIONS`];
+
+        // Wenn keine ID mehr gefunden wird, sind wir fertig
+        if (!id) break;
+
+        // Validierung
+        if (!name || !displayName || !functionsStr) {
+            console.warn(`WARN: Fahrzeug ${i} (ID: ${id}) ist unvollständig konfiguriert. Überspringe.`);
+            i++;
+            continue;
+        }
+
+        // Parse Funktionen (komma-separiert)
+        const functions = functionsStr.split(',').map(f => f.trim()).filter(f => f);
+
+        // Speichere in Mappings (Reihenfolge wird beibehalten)
+        vehicles.push({
+            id,
+            name,
+            displayName,
+            functions
+        });
+
+        fahrzeugMapping[id] = name;
+        besatzungenMapping[id] = functions;
+        fahrzeugNamenMapping[id] = displayName;
+
+        i++;
+    }
+
+    if (vehicles.length === 0) {
+        console.error('FATAL ERROR: Keine Fahrzeuge in Umgebungsvariablen gefunden!');
+        console.error('Bitte .env.fahrzeuge.example nach .env.fahrzeuge kopieren und anpassen.');
+        process.exit(1);
+    }
+
+    console.log(`✓ ${vehicles.length} Fahrzeuge aus Umgebungsvariablen geladen`);
+
+    return {
+        vehicles,
+        fahrzeugMapping,
+        besatzungenMapping,
+        fahrzeugNamenMapping
+    };
+}
+
+const VEHICLE_CONFIG = loadVehiclesFromEnv();
+
+// Funktions-Mapping für PDF-Abkürzungen (bleibt global, da für alle Fahrzeuge gleich)
+const funktionsMapping = {
+    'Gruppenführer': 'GF',
+    'Maschinist': 'MA',
+    'Angriffstrupp - Führer': 'AT (F)',
+    'Angriffstrupp - Mann': 'AT (M)',
+    'Wassertrupp - Führer': 'WT (F)',
+    'Wassertrupp - Mann': 'WT (M)',
+    'Schlauchtrupp - Führer': 'ST (F)',
+    'Schlauchtrupp - Mann': 'ST (M)',
+    'Melder': 'ME',
+    'Einsatzleiter': 'GF / ZF',
+    'Fahrer': 'MA',
+    'Staffelführer': 'GF',
+    'Truppführer': 'TF',
+    'Truppführer 1': 'TF 1',
+    'Truppmann 1': 'TM 1',
+    'Truppführer 2': 'TF 2',
+    'Truppmann 2': 'TM 2',
+    'Truppmann 3': 'TM 3',
+    'Truppmann 4': 'TM 4',
+    'Truppmann 5': 'TM 5',
+    'Truppmann 6': 'TM 6',
+    'Truppmann 7': 'TM 7',
+    'Truppmann': 'TM',
+    'Kreisbrandmeister': 'GF / ZF',
+    'Beifahrer': 'TM',
+    'Mitfahrer 1': 'MF 1',
+    'Mitfahrer 2': 'MF 2',
+    'Mitfahrer 3': 'MF 3',
+    'Lagedienstführer': 'LDF',
+    'Disponent 1': 'DISP 1',
+    'Disponent 2': 'DISP 2',
+    'Lagekarte': 'LK',
+    'ZBV': 'ZBV'
+};
+
 // E-Mail-Empfänger aus Environment (Pflichtfeld für E-Mail-Versand)
 const EMAIL_RECIPIENTS = process.env.EMAIL_RECIPIENTS;
 if (!EMAIL_RECIPIENTS) {
@@ -245,60 +344,9 @@ const generatePDFContent = (doc, einsatzData) => {
     doc.font('Helvetica').text(einsatzData.einsatzleiter || '-', margin + 80, yPos);
     
     yPos += 20;
-    
-    // Fahrzeug-Namen Mapping
-    const fahrzeugMapping = {
-        'hlf20-1': 'FRE 1 / HLF 20 /1',
-        'hlf20-2': 'FRE 1 / HLF 20 /2',
-        'lf20-1': 'FRE 1 / LF 20 /1',
-        'ptlf4000-1': 'FRE 1 / PTLF 4000',
-        'elw-1': 'FRE 1 / ELW 1',
-        'mtf-1': 'FRE 1 / MTF /1',
-        'mtf-2': 'FRE 1 / MTF /2',
-        'kdow-1': 'FRE 1 / KDOW /1',
-        'lkw-1': 'FRE 1 / LKW /1',
-        'dlk23-1': 'FRE 1 / DLK 23 /1',
-        'wlf26-1': 'FRE 1 / WLF 26 /1',
-        'gw-1': 'FRE 1 / GW /1',
-        'kks-1': 'FRE 1 / KKS /1'
-    };
-    
-    // Funktions-Mapping
-    const funktionsMapping = {
-        'Gruppenführer': 'GF',
-        'Maschinist': 'MA',
-        'Angriffstrupp - Führer': 'AT (F)',
-        'Angriffstrupp - Mann': 'AT (M)',
-        'Wassertrupp - Führer': 'WT (F)',
-        'Wassertrupp - Mann': 'WT (M)',
-        'Schlauchtrupp - Führer': 'ST (F)',
-        'Schlauchtrupp - Mann': 'ST (M)',
-        'Melder': 'ME',
-        'Einsatzleiter': 'GF / ZF',
-        'Fahrer': 'MA',
-        'Staffelführer': 'GF',
-        'Truppführer': 'TF',
-        'Truppführer 1': 'TF 1',
-        'Truppmann 1': 'TM 1',
-        'Truppführer 2': 'TF 2',
-        'Truppmann 2': 'TM 2',
-        'Truppmann 3': 'TM 3',
-        'Truppmann 4': 'TM 4',
-        'Truppmann 5': 'TM 5',
-        'Truppmann 6': 'TM 6',
-        'Truppmann 7': 'TM 7',
-        'Truppmann': 'TM',
-        'Kreisbrandmeister': 'GF / ZF',
-        'Beifahrer': 'TM',
-        'Mitfahrer 1': 'MF 1',
-        'Mitfahrer 2': 'MF 2',
-        'Mitfahrer 3': 'MF 3',
-        'Lagedienstführer': 'LDF',
-        'Disponent 1': 'DISP 1',
-        'Disponent 2': 'DISP 2',
-        'Lagekarte': 'LK',
-        'ZBV': 'ZBV'
-    };
+
+    // Verwende globale Mappings aus der .env-Konfiguration
+    const fahrzeugMapping = VEHICLE_CONFIG.fahrzeugMapping;
     
     // === NUR AKTIVE FAHRZEUGE (mit mindestens einem Namen) ===
     const fahrzeugeBesatzungen = {};
@@ -988,6 +1036,14 @@ app.get('/api/namen', (req, res) => {
     }
 
     res.json({ namen: namen });
+});
+
+// Fahrzeug-Konfiguration API
+app.get('/api/fahrzeuge', (req, res) => {
+    res.json({
+        vehicles: VEHICLE_CONFIG.vehicles,
+        funktionsMapping: funktionsMapping
+    });
 });
 
 // Anwesenheitsliste speichern
