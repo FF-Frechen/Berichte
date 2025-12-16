@@ -1,7 +1,27 @@
 version: '3.8'
 
+# Portainer Stack Configuration mit automatischem Build aus Git Repository
+# =========================================================================
+# Diese Konfiguration wird von Portainer direkt aus GitHub gepullt.
+# Portainer baut die Images automatisch beim Deployment.
+#
+# Deployment in Portainer:
+# 1. Stacks → Add stack → Repository
+# 2. Repository URL: https://github.com/FF-Frechen/Berichte
+# 3. Branch: main
+# 4. Compose path: portainer-stack.yml
+# 5. Authentication: GitHub Token (siehe GITHUB-TOKEN-GUIDE.md)
+# 6. Environment Variables setzen (siehe .env.portainer.example)
+# 7. Deploy the stack
+#
+# Beim ersten Deployment baut Portainer die Images (ca. 5-10 Minuten).
+# Updates: "Pull and redeploy" klicken - Portainer pullt und baut neu.
+
 services:
   backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
     image: feuerwehr-backend:latest
     container_name: feuerwehr-backend
     restart: unless-stopped
@@ -36,6 +56,9 @@ services:
       start_period: 60s
 
   nginx:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
     image: feuerwehr-frontend:latest
     container_name: feuerwehr-nginx
     restart: unless-stopped
