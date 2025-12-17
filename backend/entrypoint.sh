@@ -1,5 +1,5 @@
 #!/bin/sh
-# Entrypoint-Script zum sicheren Laden der .env-Dateien
+# Entrypoint-Script zum sicheren Laden der .env-Datei
 
 echo "=== Feuerwehr Backend wird gestartet ==="
 
@@ -22,42 +22,58 @@ load_env_file() {
     fi
 }
 
-# Lade .env.smtp
-if load_env_file /config/.env.smtp; then
-    echo "✓ .env.smtp geladen"
+# Lade einheitliche .env Datei
+if load_env_file /config/.env; then
+    echo "✓ .env geladen"
 else
-    echo "❌ FEHLER: .env.smtp nicht gefunden in /config/"
-    exit 1
-fi
-
-# Lade .env.namen  
-if load_env_file /config/.env.namen; then
-    echo "✓ .env.namen geladen"
-else
-    echo "❌ FEHLER: .env.namen nicht gefunden in /config/"
-    exit 1
+    echo "⚠ WARNUNG: .env nicht gefunden in /config/"
+    echo "  Verwende Umgebungsvariablen aus docker-compose.yml / portainer-stack.yml"
 fi
 
 # Prüfe ob Pflichtfelder gesetzt sind
-if [ -z "$DELETE_PASSWORD" ] || [ -z "$NAMEN" ]; then
-    echo "❌ FEHLER: Pflichtfelder nicht gesetzt!"
-    echo "DELETE_PASSWORD: ${DELETE_PASSWORD:+gesetzt}"
-    echo "NAMEN: ${NAMEN:+gesetzt}"
+if [ -z "$DELETE_PASSWORD" ]; then
+    echo "❌ FEHLER: DELETE_PASSWORD nicht gesetzt!"
+    exit 1
+fi
+
+if [ -z "$NAMEN" ]; then
+    echo "❌ FEHLER: NAMEN nicht gesetzt!"
+    exit 1
+fi
+
+# Prüfe Fahrzeugkonfiguration (mindestens ein Fahrzeug muss definiert sein)
+if [ -z "$VEHICLE_1_ID" ]; then
+    echo "❌ FEHLER: Keine Fahrzeuge konfiguriert!"
+    echo "  Mindestens VEHICLE_1_ID muss gesetzt sein"
     exit 1
 fi
 
 echo "✓ Alle Umgebungsvariablen geladen"
 echo "✓ Anzahl Namen: $(echo "$NAMEN" | awk -F',' '{print NF}')"
+
 if [ -n "$EMAIL_RECIPIENTS" ]; then
-    echo "✓ E-Mail-Empfänger (Einsatz): $(echo "$EMAIL_RECIPIENTS" | awk -F',' '{print NF}')"
-fi
-if [ -n "$EMAIL_RECIPIENTS_ANWESENHEIT" ]; then
-    echo "✓ E-Mail-Empfänger (Anwesenheit): $(echo "$EMAIL_RECIPIENTS_ANWESENHEIT" | awk -F',' '{print NF}')"
+    echo "✓ E-Mail-Empfänger (Einsatzberichte): $(echo "$EMAIL_RECIPIENTS" | awk -F',' '{print NF}')"
 fi
 
-# Setze sichere Berechtigungen für die Config-Dateien
-chmod 400 /config/.env.smtp 2>/dev/null || true
-chmod 400 /config/.env.namen 2>/dev/null || true
+if [ -n "$EMAIL_RECIPIENTS_ANWESENHEIT" ]; then
+    echo "✓ E-Mail-Empfänger (Anwesenheitslisten): $(echo "$EMAIL_RECIPIENTS_ANWESENHEIT" | awk -F',' '{print NF}')"
+fi
+
+# Zähle konfigurierte Fahrzeuge
+vehicle_count=0
+for i in $(seq 1 20); do
+    var_name="VEHICLE_${i}_ID"
+    eval "var_value=\$$var_name"
+    if [ -n "$var_value" ]; then
+        vehicle_count=$((vehicle_count + 1))
+    else
+        break
+    fi
+done
+echo "✓ Anzahl konfigurierte Fahrzeuge: $vehicle_count"
+
+# Setze sichere Berechtigungen für die Config-Datei
+chmod 400 /config/.env 2>/dev/null || true
 
 # Starte Node.js Anwendung
 echo "=== Starte Node.js Server ==="
