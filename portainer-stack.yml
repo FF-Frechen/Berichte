@@ -40,8 +40,9 @@ services:
 
   nginx:
     build:
-      context: ./frontend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./frontend/Dockerfile
+    image: feuerwehr-frontend:latest
     container_name: feuerwehr-nginx
     restart: unless-stopped
     ports:
