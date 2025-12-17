@@ -153,9 +153,9 @@ const funktionsMapping = {
 };
 
 // E-Mail-Empfänger aus Environment (Pflichtfeld für E-Mail-Versand)
-const EMAIL_RECIPIENTS = process.env.EMAIL_RECIPIENTS;
-if (!EMAIL_RECIPIENTS) {
-    console.warn('WARN: EMAIL_RECIPIENTS nicht gesetzt. E-Mail-Versand wird deaktiviert.');
+const EMAIL_RECIPIENTS_BERICHT = process.env.EMAIL_RECIPIENTS_BERICHT;
+if (!EMAIL_RECIPIENTS_BERICHT) {
+    console.warn('WARN: EMAIL_RECIPIENTS_BERICHT nicht gesetzt. E-Mail-Versand für Einsatzberichte wird deaktiviert.');
 }
 
 let mailTransporter = null;
@@ -903,15 +903,15 @@ app.post('/api/pdf/email', async (req, res) => {
         return res.status(500).json({ error: 'E-Mail-Dienst nicht konfiguriert. Prüfen Sie die SMTP-Einstellungen.' });
     }
     
-    if (!EMAIL_RECIPIENTS) {
+    if (!EMAIL_RECIPIENTS_BERICHT) {
         console.error('[EMAIL] FEHLER: Keine Empfänger konfiguriert');
-        return res.status(500).json({ error: 'Keine E-Mail-Empfänger konfiguriert. Bitte EMAIL_RECIPIENTS in .env.smtp setzen.' });
+        return res.status(500).json({ error: 'Keine E-Mail-Empfänger konfiguriert. Bitte EMAIL_RECIPIENTS_BERICHT in .env setzen.' });
     }
-    
+
     // Prüfe auf Platzhalter-Adressen
-    if (EMAIL_RECIPIENTS.includes('example.com')) {
-        console.error('[EMAIL] FEHLER: EMAIL_RECIPIENTS enthält Platzhalter-Adressen!');
-        console.error('[EMAIL] Aktuelle Empfänger:', EMAIL_RECIPIENTS);
+    if (EMAIL_RECIPIENTS_BERICHT.includes('example.com')) {
+        console.error('[EMAIL] FEHLER: EMAIL_RECIPIENTS_BERICHT enthält Platzhalter-Adressen!');
+        console.error('[EMAIL] Aktuelle Empfänger:', EMAIL_RECIPIENTS_BERICHT);
         return res.status(500).json({ error: 'E-Mail-Empfänger sind nicht korrekt konfiguriert. Bitte echte E-Mail-Adressen in .env.smtp eintragen.' });
     }
 
@@ -943,7 +943,7 @@ app.post('/api/pdf/email', async (req, res) => {
         
         // Hole Einsatznummer für E-Mail-Text
         const einsatznummer = pdf.einsatznummer;
-        const recipients = EMAIL_RECIPIENTS.split(',').map(e => e.trim());
+        const recipients = EMAIL_RECIPIENTS_BERICHT.split(',').map(e => e.trim());
         
         console.log('[EMAIL] Empfänger:', recipients);
         
@@ -1275,14 +1275,26 @@ app.post('/api/anwesenheit/email', async (req, res) => {
         return res.status(500).json({ error: 'E-Mail-Dienst nicht konfiguriert. Prüfen Sie die SMTP-Einstellungen.' });
     }
 
+    const { datum, thema, dienstleiter, teilnehmer, type } = req.body;
+
+    // Bestimme Email-Empfänger basierend auf dem Typ
     const EMAIL_RECIPIENTS_ANWESENHEIT = process.env.EMAIL_RECIPIENTS_ANWESENHEIT;
+    const EMAIL_RECIPIENTS_SONDER = process.env.EMAIL_RECIPIENTS_SONDER;
 
-    if (!EMAIL_RECIPIENTS_ANWESENHEIT) {
-        console.error('[ANWESENHEIT EMAIL] FEHLER: Keine Empfänger konfiguriert');
-        return res.status(500).json({ error: 'Keine E-Mail-Empfänger konfiguriert. Bitte EMAIL_RECIPIENTS_ANWESENHEIT in .env.smtp setzen.' });
+    let recipients;
+    if (type === 'sonder') {
+        recipients = EMAIL_RECIPIENTS_SONDER;
+        if (!recipients) {
+            console.error('[ANWESENHEIT EMAIL] FEHLER: Keine Empfänger für Sonderdienste konfiguriert');
+            return res.status(500).json({ error: 'Keine E-Mail-Empfänger konfiguriert. Bitte EMAIL_RECIPIENTS_SONDER in .env setzen.' });
+        }
+    } else {
+        recipients = EMAIL_RECIPIENTS_ANWESENHEIT;
+        if (!recipients) {
+            console.error('[ANWESENHEIT EMAIL] FEHLER: Keine Empfänger für Anwesenheitslisten konfiguriert');
+            return res.status(500).json({ error: 'Keine E-Mail-Empfänger konfiguriert. Bitte EMAIL_RECIPIENTS_ANWESENHEIT in .env setzen.' });
+        }
     }
-
-    const { datum, thema, dienstleiter, teilnehmer } = req.body;
 
     if (!datum) {
         return res.status(400).json({ error: 'Datum ist erforderlich.' });
@@ -1301,7 +1313,7 @@ app.post('/api/anwesenheit/email', async (req, res) => {
                 // Send email
                 const mailOptions = {
                     from: SMTP_CONFIG.auth.user,
-                    to: EMAIL_RECIPIENTS_ANWESENHEIT,
+                    to: recipients,
                     subject: `Anwesenheitsliste vom ${datum}${thema ? ' - ' + thema : ''}`,
                     text: `Anbei finden Sie die Anwesenheitsliste vom ${datum}.\n\nThema: ${thema || 'Nicht angegeben'}\nDienstleiter: ${dienstleiter || 'Nicht angegeben'}\nTeilnehmer: ${teilnehmer.length}`,
                     attachments: [{
@@ -1310,7 +1322,7 @@ app.post('/api/anwesenheit/email', async (req, res) => {
                     }]
                 };
 
-                console.log('[ANWESENHEIT EMAIL] Sende E-Mail an:', EMAIL_RECIPIENTS_ANWESENHEIT);
+                console.log('[ANWESENHEIT EMAIL] Sende E-Mail an:', recipients);
 
                 await mailTransporter.sendMail(mailOptions);
 
