@@ -1,6 +1,9 @@
 
 FROM nginx:alpine
 
+# Kopiere Nginx-Konfiguration
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
 # Kopiere Frontend-Dateien
 COPY ./ /usr/share/nginx/html
 
