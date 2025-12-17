@@ -37,6 +37,7 @@ Ein Docker-basiertes System zur Verwaltung von Einsatzberichten und Anwesenheits
    - E-Mail-Empfänger
    - Passwörter
    - Liste der Feuerwehrmitglieder (Komma-getrennt)
+   - Fahrzeugkonfiguration mit Funktionen
 
 3. **Docker Container starten:**
    ```bash
@@ -44,7 +45,7 @@ Ein Docker-basiertes System zur Verwaltung von Einsatzberichten und Anwesenheits
    ```
 
 4. **Anwendung öffnen:**
-   
+
    Öffne deinen Browser und navigiere zu: `http://localhost`
 
 ## 📁 Projektstruktur
@@ -87,9 +88,32 @@ EMAIL_RECIPIENTS_ANWESENHEIT=empfaenger1@example.com
 
 # Namensliste
 NAMEN=Max Mustermann,Erika Musterfrau,Hans Schmidt
+
+# Fahrzeugkonfiguration (Beispiel für ein Fahrzeug)
+VEHICLE_1_ID=hlf20-1
+VEHICLE_1_NAME=FRE 1 / HLF 20 /1
+VEHICLE_1_DISPLAY_NAME=FRE1/HLF20/1 - Hilfeleistungslöschfahrzeug
+VEHICLE_1_FUNCTIONS=Gruppenführer,Maschinist,Angriffstrupp - Führer,...
+# ... weitere Fahrzeuge (siehe .env.example)
 ```
 
-> **💡 Tipp:** Diese Datei wird automatisch von `docker-compose.yml` geladen.
+### Fahrzeugkonfiguration
+
+Die Fahrzeuge und ihre Funktionen werden direkt in der `.env` konfiguriert. Die Reihenfolge der Fahrzeuge in der Datei bestimmt die Reihenfolge auf der Webseite.
+
+**Eigenschaften:**
+- `VEHICLE_X_ID` - Eindeutige ID (intern verwendet)
+- `VEHICLE_X_NAME` - Name für PDF-Generierung (kurz)
+- `VEHICLE_X_DISPLAY_NAME` - Vollständiger Name für die Webseite
+- `VEHICLE_X_FUNCTIONS` - Komma-separierte Liste der Funktionen/Positionen
+
+**Anpassung:**
+- Fahrzeuge hinzufügen: Neuen Block mit nächster Nummer anhängen
+- Fahrzeuge entfernen: Entsprechenden Block löschen und Nummern anpassen
+- Reihenfolge ändern: Blöcke verschieben (Nummern beibehalten)
+- Funktionen anpassen: `FUNCTIONS` Zeile bearbeiten
+
+Siehe `.env.example` für die vollständige Konfiguration aller 13 Standard-Fahrzeuge.
 
 ## 🔧 Docker Befehle
 
@@ -127,7 +151,7 @@ Portainer pullt die Dateien direkt von GitHub und baut die Images automatisch.
    Repository URL: https://github.com/FF-Frechen/Berichte
    Branch: refs/heads/main
    Compose path: portainer-stack.yml
-   Authentication: GitHub Token (Contents: Read Permission)
+   Authentication: GitHub Token (siehe GITHUB-TOKEN-GUIDE.md)
    ```
 
 3. **Environment-Variablen setzen** (siehe `.env.example`)
