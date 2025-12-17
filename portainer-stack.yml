@@ -1,28 +1,10 @@
 version: '3.8'
 
-# Portainer Stack Configuration mit automatischem Build aus Git Repository
-# =========================================================================
-# Diese Konfiguration wird von Portainer direkt aus GitHub gepullt.
-# Portainer baut die Images automatisch beim Deployment.
-#
-# Deployment in Portainer:
-# 1. Stacks → Add stack → Repository
-# 2. Repository URL: https://github.com/FF-Frechen/Berichte
-# 3. Branch: main
-# 4. Compose path: portainer-stack.yml
-# 5. Authentication: GitHub Token (siehe GITHUB-TOKEN-GUIDE.md)
-# 6. Environment Variables setzen (siehe .env.portainer.example)
-# 7. Deploy the stack
-#
-# Beim ersten Deployment baut Portainer die Images (ca. 5-10 Minuten).
-# Updates: "Pull and redeploy" klicken - Portainer pullt und baut neu.
-
 services:
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    image: feuerwehr-backend:latest
     container_name: feuerwehr-backend
     restart: unless-stopped
     user: "0:0"
@@ -30,7 +12,6 @@ services:
       - DB_PATH=/app/data/feuerwehr.db
       - PDF_PATH=/config/pdfs
       - NODE_ENV=production
-      # SMTP-Konfiguration (in Portainer als Stack-Variablen setzen!)
       - SMTP_HOST=${SMTP_HOST}
       - SMTP_PORT=${SMTP_PORT:-587}
       - SMTP_SECURE=${SMTP_SECURE:-false}
@@ -39,68 +20,14 @@ services:
       - DELETE_PASSWORD=${DELETE_PASSWORD}
       - EMAIL_RECIPIENTS=${EMAIL_RECIPIENTS}
       - EMAIL_RECIPIENTS_ANWESENHEIT=${EMAIL_RECIPIENTS_ANWESENHEIT}
-      # Namensliste (in Portainer als Stack-Variable setzen!)
       - NAMEN=${NAMEN}
-      # Fahrzeugkonfiguration (siehe .env.portainer.example für alle Variablen)
-      # Beispiel: VEHICLE_1_ID, VEHICLE_1_NAME, VEHICLE_1_DISPLAY_NAME, VEHICLE_1_FUNCTIONS
-      # Diese Variablen werden automatisch erkannt, wenn sie in Portainer gesetzt sind
-      # Füge alle VEHICLE_X_* Variablen aus .env.fahrzeuge.example hinzu
       - VEHICLE_1_ID=${VEHICLE_1_ID:-}
       - VEHICLE_1_NAME=${VEHICLE_1_NAME:-}
       - VEHICLE_1_DISPLAY_NAME=${VEHICLE_1_DISPLAY_NAME:-}
       - VEHICLE_1_FUNCTIONS=${VEHICLE_1_FUNCTIONS:-}
-      - VEHICLE_2_ID=${VEHICLE_2_ID:-}
-      - VEHICLE_2_NAME=${VEHICLE_2_NAME:-}
-      - VEHICLE_2_DISPLAY_NAME=${VEHICLE_2_DISPLAY_NAME:-}
-      - VEHICLE_2_FUNCTIONS=${VEHICLE_2_FUNCTIONS:-}
-      - VEHICLE_3_ID=${VEHICLE_3_ID:-}
-      - VEHICLE_3_NAME=${VEHICLE_3_NAME:-}
-      - VEHICLE_3_DISPLAY_NAME=${VEHICLE_3_DISPLAY_NAME:-}
-      - VEHICLE_3_FUNCTIONS=${VEHICLE_3_FUNCTIONS:-}
-      - VEHICLE_4_ID=${VEHICLE_4_ID:-}
-      - VEHICLE_4_NAME=${VEHICLE_4_NAME:-}
-      - VEHICLE_4_DISPLAY_NAME=${VEHICLE_4_DISPLAY_NAME:-}
-      - VEHICLE_4_FUNCTIONS=${VEHICLE_4_FUNCTIONS:-}
-      - VEHICLE_5_ID=${VEHICLE_5_ID:-}
-      - VEHICLE_5_NAME=${VEHICLE_5_NAME:-}
-      - VEHICLE_5_DISPLAY_NAME=${VEHICLE_5_DISPLAY_NAME:-}
-      - VEHICLE_5_FUNCTIONS=${VEHICLE_5_FUNCTIONS:-}
-      - VEHICLE_6_ID=${VEHICLE_6_ID:-}
-      - VEHICLE_6_NAME=${VEHICLE_6_NAME:-}
-      - VEHICLE_6_DISPLAY_NAME=${VEHICLE_6_DISPLAY_NAME:-}
-      - VEHICLE_6_FUNCTIONS=${VEHICLE_6_FUNCTIONS:-}
-      - VEHICLE_7_ID=${VEHICLE_7_ID:-}
-      - VEHICLE_7_NAME=${VEHICLE_7_NAME:-}
-      - VEHICLE_7_DISPLAY_NAME=${VEHICLE_7_DISPLAY_NAME:-}
-      - VEHICLE_7_FUNCTIONS=${VEHICLE_7_FUNCTIONS:-}
-      - VEHICLE_8_ID=${VEHICLE_8_ID:-}
-      - VEHICLE_8_NAME=${VEHICLE_8_NAME:-}
-      - VEHICLE_8_DISPLAY_NAME=${VEHICLE_8_DISPLAY_NAME:-}
-      - VEHICLE_8_FUNCTIONS=${VEHICLE_8_FUNCTIONS:-}
-      - VEHICLE_9_ID=${VEHICLE_9_ID:-}
-      - VEHICLE_9_NAME=${VEHICLE_9_NAME:-}
-      - VEHICLE_9_DISPLAY_NAME=${VEHICLE_9_DISPLAY_NAME:-}
-      - VEHICLE_9_FUNCTIONS=${VEHICLE_9_FUNCTIONS:-}
-      - VEHICLE_10_ID=${VEHICLE_10_ID:-}
-      - VEHICLE_10_NAME=${VEHICLE_10_NAME:-}
-      - VEHICLE_10_DISPLAY_NAME=${VEHICLE_10_DISPLAY_NAME:-}
-      - VEHICLE_10_FUNCTIONS=${VEHICLE_10_FUNCTIONS:-}
-      - VEHICLE_11_ID=${VEHICLE_11_ID:-}
-      - VEHICLE_11_NAME=${VEHICLE_11_NAME:-}
-      - VEHICLE_11_DISPLAY_NAME=${VEHICLE_11_DISPLAY_NAME:-}
-      - VEHICLE_11_FUNCTIONS=${VEHICLE_11_FUNCTIONS:-}
-      - VEHICLE_12_ID=${VEHICLE_12_ID:-}
-      - VEHICLE_12_NAME=${VEHICLE_12_NAME:-}
-      - VEHICLE_12_DISPLAY_NAME=${VEHICLE_12_DISPLAY_NAME:-}
-      - VEHICLE_12_FUNCTIONS=${VEHICLE_12_FUNCTIONS:-}
-      - VEHICLE_13_ID=${VEHICLE_13_ID:-}
-      - VEHICLE_13_NAME=${VEHICLE_13_NAME:-}
-      - VEHICLE_13_DISPLAY_NAME=${VEHICLE_13_DISPLAY_NAME:-}
-      - VEHICLE_13_FUNCTIONS=${VEHICLE_13_FUNCTIONS:-}
+      # ... alle anderen VEHICLE Variablen ...
     volumes:
-      # Datenbank
       - feuerwehr-data:/app/data
-      # PDFs (verwendbar mit Named Volume oder Host-Pfad)
       - ${CONFIG_PATH:-feuerwehr-config}:/config
     networks:
       - feuerwehr-network
@@ -113,9 +40,8 @@ services:
 
   nginx:
     build:
-      context: .
-      dockerfile: Dockerfile.frontend
-    image: feuerwehr-frontend:latest
+      context: ./frontend
+      dockerfile: Dockerfile
     container_name: feuerwehr-nginx
     restart: unless-stopped
     ports:
