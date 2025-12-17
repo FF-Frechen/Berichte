@@ -113,8 +113,8 @@ services:
 
   nginx:
     build:
-      context: .
-      dockerfile: Dockerfile.frontend
+      context: ./frontend
+      dockerfile: Dockerfile
     image: feuerwehr-frontend:latest
     container_name: feuerwehr-nginx
     restart: unless-stopped
