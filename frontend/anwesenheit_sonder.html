@@ -1,0 +1,936 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Feuerwehr - Anwesenheitsliste Sonderdienst</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 20px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .header-container {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+      margin-bottom: 30px;
+      align-items: center;
+    }
+
+    h1 {
+      color: #d62828;
+      text-align: center;
+      margin: 0;
+      padding: 10px 0;
+    }
+
+    .header-button {
+      padding: 10px 15px;
+      background-color: #003049;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 14px;
+      text-decoration: none;
+      width: 100%;
+      box-sizing: border-box;
+      display: inline-block;
+      text-align: center;
+    }
+
+    @media (min-width: 1000px) {
+      .header-container {
+        grid-template-columns: auto 1fr auto;
+        gap: 20px;
+        margin-bottom: 20px;
+      }
+      .header-button {
+        width: auto;
+        white-space: nowrap;
+        display: inline-block;
+      }
+    }
+
+    .header-button:hover {
+      background-color: #001d3d;
+    }
+
+    .container {
+      background-color: #f8f9fa;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    .info-section {
+      background-color: #e7f3ff;
+      padding: 15px;
+      border-radius: 5px;
+      margin-bottom: 20px;
+      border-left: 4px solid #003049;
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 15px;
+      margin-bottom: 15px;
+    }
+
+    .form-group {
+      margin-bottom: 15px;
+    }
+
+    .form-group label {
+      display: block;
+      font-weight: bold;
+      margin-bottom: 5px;
+      color: #333;
+    }
+
+    .form-group input[type="text"],
+    .form-group input[type="date"] {
+      width: 100%;
+      padding: 8px;
+      box-sizing: border-box;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background-color: white;
+      margin-top: 20px;
+      table-layout: fixed;
+    }
+
+    th, td {
+      border: 1px solid #ddd;
+      padding: 8px;
+      text-align: left;
+    }
+
+    td {
+      overflow: visible;
+    }
+
+    th {
+      background-color: #003049;
+      color: white;
+      font-weight: bold;
+      font-size: 13px;
+    }
+
+    .nr-column {
+      width: 8%;
+      text-align: center;
+    }
+
+    .name-column {
+      width: 28%;
+    }
+
+    .name-column > div {
+      position: relative;
+    }
+
+    .status-column {
+      width: 42%;
+    }
+
+    .bemerkung-column {
+      width: 22%;
+    }
+
+    .bemerkung-column input {
+      max-height: 80px;
+      overflow-y: auto;
+    }
+
+    @media (min-width: 768px) {
+      th, td {
+        padding: 10px;
+      }
+
+      th {
+        font-size: 14px;
+      }
+
+      .nr-column {
+        width: 5%;
+      }
+
+      .name-column {
+        width: 30%;
+      }
+
+      .status-column {
+        width: 40%;
+      }
+
+      .bemerkung-column {
+        width: 25%;
+      }
+    }
+
+    .status-options {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .status-options label {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-weight: normal;
+      cursor: pointer;
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    .status-options input[type="radio"] {
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    @media (min-width: 768px) {
+      .status-options {
+        flex-direction: row;
+        gap: 15px;
+        flex-wrap: wrap;
+      }
+
+      .status-options label {
+        font-size: 14px;
+      }
+    }
+
+    input[type="text"] {
+      width: 100%;
+      padding: 6px;
+      box-sizing: border-box;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 13px;
+    }
+
+    @media (min-width: 768px) {
+      input[type="text"] {
+        padding: 8px;
+        font-size: 14px;
+      }
+    }
+
+    .autocomplete-items {
+      position: absolute;
+      border: 1px solid #d4d4d4;
+      border-top: none;
+      z-index: 1000;
+      top: 100%;
+      left: 0;
+      right: 0;
+      max-height: 200px;
+      overflow-y: auto;
+      background-color: white;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+
+    .autocomplete-items div {
+      padding: 10px;
+      cursor: pointer;
+      background-color: #fff;
+      border-bottom: 1px solid #d4d4d4;
+    }
+
+    .autocomplete-items div:hover {
+      background-color: #e9e9e9;
+    }
+
+    .autocomplete-active {
+      background-color: #003049 !important;
+      color: #ffffff;
+    }
+
+    .action-buttons {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      margin-top: 20px;
+      flex-wrap: wrap;
+    }
+
+    button {
+      padding: 10px 20px;
+      background-color: #003049;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 16px;
+    }
+
+    button:hover {
+      background-color: #001d3d;
+    }
+
+    button.add-row {
+      background-color: #198754;
+    }
+
+    button.add-row:hover {
+      background-color: #146c43;
+    }
+
+    button[style*="background-color: #dc3545"]:hover {
+      background-color: #bb2d3b !important;
+    }
+
+    @media print {
+      .header-button, .action-buttons {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header-container">
+      <a href="index.html" class="header-button">← Zurück</a>
+      <h1>Anwesenheitsliste Sonderdienst</h1>
+      <div></div>
+    </div>
+
+    <div class="info-section">
+      <div class="form-row">
+        <div class="form-group">
+          <label for="datum">Datum:</label>
+          <input type="date" id="datum">
+        </div>
+        <div class="form-group">
+          <label for="thema">Thema:</label>
+          <input type="text" id="thema">
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="dienstleiter">Dienstleiter:</label>
+        <input type="text" id="dienstleiter">
+      </div>
+    </div>
+
+    <table id="attendance-table">
+      <thead>
+        <tr>
+          <th class="nr-column">Nr.</th>
+          <th class="name-column">Name</th>
+          <th class="status-column">Anwesenheit</th>
+          <th class="bemerkung-column">Bemerkung / Info</th>
+        </tr>
+      </thead>
+      <tbody id="attendance-tbody">
+        <!-- Rows will be added here by JavaScript -->
+      </tbody>
+    </table>
+
+    <div class="action-buttons">
+      <button onclick="sendEmail()">📧 PDF verschicken</button>
+      <button onclick="resetForm()" style="background-color: #dc3545;">Alle Daten zurücksetzen</button>
+    </div>
+  </div>
+
+  <script>
+    const SERVER_URL = '/api';
+    let namesCache = [];
+    let rowCounter = 1;
+    let autoSaveTimeout = null;
+    let isSaving = false;
+
+    // Load names from .env.namen file
+    async function loadNames() {
+      try {
+        const response = await fetch(`${SERVER_URL}/namen`);
+        if (response.ok) {
+          const data = await response.json();
+          namesCache = data.namen || [];
+        }
+      } catch (error) {
+        console.error('Fehler beim Laden der Namen:', error);
+      }
+    }
+
+    // Auto-save current state
+    async function autoSave() {
+      if (isSaving) return;
+
+      isSaving = true;
+      const data = getCurrentFormData();
+
+      try {
+        const response = await fetch(`${SERVER_URL}/anwesenheit/draft`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+
+        if (response.ok) {
+          console.log('Auto-saved');
+        }
+      } catch (error) {
+        console.error('Auto-save Fehler:', error);
+      } finally {
+        isSaving = false;
+      }
+    }
+
+    // Trigger auto-save with debounce
+    function triggerAutoSave() {
+      if (autoSaveTimeout) {
+        clearTimeout(autoSaveTimeout);
+      }
+      autoSaveTimeout = setTimeout(autoSave, 1000); // Save after 1 second of inactivity
+    }
+
+    // Get current form data
+    function getCurrentFormData() {
+      const data = {
+        datum: document.getElementById('datum').value,
+        thema: document.getElementById('thema').value,
+        dienstleiter: document.getElementById('dienstleiter').value,
+        teilnehmer: []
+      };
+
+      const rows = document.querySelectorAll('#attendance-tbody tr');
+      rows.forEach((row, index) => {
+        const nr = index + 1;
+        const name = row.querySelector('.name-input')?.value || '';
+        const status = row.querySelector('input[type="radio"]:checked')?.value || '';
+        const bemerkung = row.querySelector('.bemerkung-column input')?.value || '';
+
+        if (name || status || bemerkung) {
+          data.teilnehmer.push({
+            nr: nr,
+            name: name,
+            status: status,
+            bemerkung: bemerkung
+          });
+        }
+      });
+
+      return data;
+    }
+
+    // Load draft on page load
+    async function loadDraft() {
+      try {
+        const response = await fetch(`${SERVER_URL}/anwesenheit/draft`);
+        if (response.ok) {
+          const data = await response.json();
+
+          if (data.draft) {
+            // Load header data (or set to today if empty)
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('datum').value = data.draft.datum || today;
+            document.getElementById('thema').value = data.draft.thema || '';
+            document.getElementById('dienstleiter').value = data.draft.dienstleiter || '';
+
+            // Clear existing rows
+            const tbody = document.getElementById('attendance-tbody');
+            tbody.innerHTML = '';
+
+            // Load saved rows
+            if (data.draft.teilnehmer && data.draft.teilnehmer.length > 0) {
+              data.draft.teilnehmer.forEach(person => {
+                addRowWithData(person);
+              });
+            } else {
+              // Add empty row if no data
+              addRow();
+            }
+
+            console.log('Draft geladen');
+          } else {
+            // No draft found, set today's date and initialize with empty row
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('datum').value = today;
+            addRow();
+          }
+        }
+      } catch (error) {
+        console.error('Fehler beim Laden des Entwurfs:', error);
+        // Set today's date on error
+        const today = new Date().toISOString().split('T')[0];
+        document.getElementById('datum').value = today;
+        addRow(); // Fallback to empty row
+      }
+    }
+
+    // Initialize with 1 empty row
+    function initializeRows() {
+      addRow();
+    }
+
+    // Renumber all rows sequentially
+    function renumberRows() {
+      const tbody = document.getElementById('attendance-tbody');
+      const rows = tbody.querySelectorAll('tr');
+
+      rows.forEach((row, index) => {
+        const newNr = index + 1;
+        const nrCell = row.querySelector('.nr-column');
+        nrCell.textContent = newNr;
+      });
+    }
+
+    // Add a new row to the table
+    function addRow() {
+      const tbody = document.getElementById('attendance-tbody');
+      const row = document.createElement('tr');
+      const nr = rowCounter++;
+
+      row.innerHTML = `
+        <td class="nr-column">${nr}</td>
+        <td class="name-column">
+          <div style="position: relative;">
+            <input type="text" class="name-input" data-row="${nr}" autocomplete="off">
+            <div class="autocomplete-items" id="autocomplete-${nr}"></div>
+          </div>
+        </td>
+        <td class="status-column">
+          <div class="status-options">
+            <label>
+              <input type="radio" name="status-${nr}" value="anwesend"> anwesend
+            </label>
+            <label>
+              <input type="radio" name="status-${nr}" value="nicht_anwesend"> nicht anwesend
+            </label>
+            <label>
+              <input type="radio" name="status-${nr}" value="entschuldigt"> entschuldigt
+            </label>
+          </div>
+        </td>
+        <td class="bemerkung-column">
+          <input type="text" data-row="${nr}">
+        </td>
+      `;
+
+      tbody.appendChild(row);
+
+      // Setup autocomplete for this row
+      const input = row.querySelector('.name-input');
+      setupAutocomplete(input);
+
+      // Add change listeners for auto-save
+      row.querySelectorAll('input').forEach(input => {
+        input.addEventListener('input', triggerAutoSave);
+        input.addEventListener('change', triggerAutoSave);
+      });
+
+      renumberRows();
+    }
+
+    // Add a row with existing data (for loading draft)
+    function addRowWithData(person) {
+      const tbody = document.getElementById('attendance-tbody');
+      const row = document.createElement('tr');
+      const nr = rowCounter++;
+
+      row.innerHTML = `
+        <td class="nr-column">${nr}</td>
+        <td class="name-column">
+          <div style="position: relative;">
+            <input type="text" class="name-input" data-row="${nr}" value="${person.name || ''}" autocomplete="off">
+            <div class="autocomplete-items" id="autocomplete-${nr}"></div>
+          </div>
+        </td>
+        <td class="status-column">
+          <div class="status-options">
+            <label>
+              <input type="radio" name="status-${nr}" value="anwesend" ${person.status === 'anwesend' ? 'checked' : ''}> anwesend
+            </label>
+            <label>
+              <input type="radio" name="status-${nr}" value="nicht_anwesend" ${person.status === 'nicht_anwesend' ? 'checked' : ''}> nicht anwesend
+            </label>
+            <label>
+              <input type="radio" name="status-${nr}" value="entschuldigt" ${person.status === 'entschuldigt' ? 'checked' : ''}> entschuldigt
+            </label>
+          </div>
+        </td>
+        <td class="bemerkung-column">
+          <input type="text" data-row="${nr}" value="${person.bemerkung || ''}">
+        </td>
+      `;
+
+      tbody.appendChild(row);
+
+      // Setup autocomplete for this row
+      const input = row.querySelector('.name-input');
+      setupAutocomplete(input);
+
+      // Add change listeners for auto-save
+      row.querySelectorAll('input').forEach(input => {
+        input.addEventListener('input', triggerAutoSave);
+        input.addEventListener('change', triggerAutoSave);
+      });
+
+      renumberRows();
+    }
+
+    // Setup autocomplete for a specific input field
+    function setupAutocomplete(input) {
+      const row = input.closest('tr');
+      const autocompleteDiv = row.querySelector('.autocomplete-items');
+      let currentFocus = -1;
+      let hadContent = false;
+
+      // Handle input: autocomplete dropdown AND add new row when needed
+      input.addEventListener('input', function() {
+        const val = this.value;
+
+        // Track if user has ever entered content
+        if (val.trim().length > 0) {
+          hadContent = true;
+        }
+
+        // Add new row when typing in the name field of the last row
+        const tbody = document.getElementById('attendance-tbody');
+        const rows = tbody.querySelectorAll('tr');
+        const currentRowIndex = Array.from(rows).indexOf(row);
+        const totalRows = rows.length;
+
+        // If this is the last row and user starts typing, add a new row
+        if (currentRowIndex === totalRows - 1 && val.trim().length > 0) {
+          // Check if we need to add a row (only if we're still the last row)
+          const currentRows = tbody.querySelectorAll('tr');
+          if (currentRows.length === totalRows) {
+            addRow();
+          }
+        }
+
+        // Handle autocomplete dropdown
+        closeAllLists();
+        if (!val) return;
+        currentFocus = -1;
+
+        const matches = namesCache.filter(name =>
+          name.toLowerCase().includes(val.toLowerCase())
+        );
+
+        matches.forEach(name => {
+          const div = document.createElement('div');
+          div.innerHTML = name;
+          div.addEventListener('click', function() {
+            input.value = name;
+            closeAllLists();
+          });
+          autocompleteDiv.appendChild(div);
+        });
+      });
+
+      // Delete empty rows when name is cleared (except first row)
+      input.addEventListener('blur', function() {
+        setTimeout(() => {
+          const tbody = document.getElementById('attendance-tbody');
+          const rows = tbody.querySelectorAll('tr');
+          const currentRowIndex = Array.from(rows).indexOf(row);
+
+          const name = input.value.trim();
+          const status = row.querySelector('input[type="radio"]:checked');
+          const bemerkung = row.querySelector('.bemerkung-column input').value.trim();
+
+          // Only delete if:
+          // - Not the first row
+          // - User had previously entered content (hadContent = true)
+          // - Now the row is completely empty
+          // - Row still exists in DOM
+          if (currentRowIndex > 0 && hadContent && !name && !status && !bemerkung && row.parentNode) {
+            row.remove();
+            renumberRows();
+            triggerAutoSave();
+          }
+        }, 200);
+      });
+
+      input.addEventListener('keydown', function(e) {
+        const items = autocompleteDiv.getElementsByTagName('div');
+        if (e.keyCode === 40) { // Down
+          currentFocus++;
+          addActive(items);
+        } else if (e.keyCode === 38) { // Up
+          currentFocus--;
+          addActive(items);
+        } else if (e.keyCode === 13) { // Enter
+          e.preventDefault();
+          if (currentFocus > -1 && items[currentFocus]) {
+            items[currentFocus].click();
+          }
+        }
+      });
+
+      function addActive(items) {
+        if (!items) return;
+        removeActive(items);
+        if (currentFocus >= items.length) currentFocus = 0;
+        if (currentFocus < 0) currentFocus = items.length - 1;
+        if (items[currentFocus]) {
+          items[currentFocus].classList.add('autocomplete-active');
+        }
+      }
+
+      function removeActive(items) {
+        for (let i = 0; i < items.length; i++) {
+          items[i].classList.remove('autocomplete-active');
+        }
+      }
+
+      function closeAllLists() {
+        autocompleteDiv.innerHTML = '';
+      }
+
+      document.addEventListener('click', function(e) {
+        if (e.target !== input) {
+          closeAllLists();
+        }
+      });
+    }
+
+    // Save data
+    async function saveData() {
+      const data = {
+        datum: document.getElementById('datum').value,
+        thema: document.getElementById('thema').value,
+        dienstleiter: document.getElementById('dienstleiter').value,
+        teilnehmer: []
+      };
+
+      const rows = document.querySelectorAll('#attendance-tbody tr');
+      rows.forEach((row, index) => {
+        const nr = index + 1;
+        const name = document.getElementById(`name-${nr}`)?.value || '';
+        const status = document.querySelector(`input[name="status-${nr}"]:checked`)?.value || '';
+        const bemerkung = document.getElementById(`bemerkung-${nr}`)?.value || '';
+
+        if (name || status || bemerkung) {
+          data.teilnehmer.push({
+            nr: nr,
+            name: name,
+            status: status,
+            bemerkung: bemerkung
+          });
+        }
+      });
+
+      try {
+        const response = await fetch(`${SERVER_URL}/anwesenheit`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+
+        if (response.ok) {
+          alert('Daten erfolgreich gespeichert!');
+        } else {
+          alert('Fehler beim Speichern der Daten.');
+        }
+      } catch (error) {
+        console.error('Fehler:', error);
+        alert('Netzwerkfehler beim Speichern.');
+      }
+    }
+
+    // Generate PDF
+    async function generatePDF() {
+      // Validate attendance status
+      const validationErrors = validateAttendance();
+      if (validationErrors.length > 0) {
+        alert('Bitte korrigieren Sie folgende Fehler:\n\n' + validationErrors.join('\n'));
+        return;
+      }
+
+      // First save the data
+      const data = {
+        datum: document.getElementById('datum').value,
+        thema: document.getElementById('thema').value,
+        dienstleiter: document.getElementById('dienstleiter').value,
+        teilnehmer: []
+      };
+
+      const rows = document.querySelectorAll('#attendance-tbody tr');
+      rows.forEach((row, index) => {
+        const nr = index + 1;
+        const name = row.querySelector('.name-input')?.value || '';
+        const status = row.querySelector('input[type="radio"]:checked')?.value || '';
+        const bemerkung = row.querySelector('.bemerkung-column input')?.value || '';
+
+        if (name || status || bemerkung) {
+          data.teilnehmer.push({
+            nr: nr,
+            name: name,
+            status: status,
+            bemerkung: bemerkung
+          });
+        }
+      });
+
+      try {
+        const response = await fetch(`${SERVER_URL}/anwesenheit/pdf`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+
+        if (response.ok) {
+          const blob = await response.blob();
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `Anwesenheitsliste_${data.datum}.pdf`;
+          document.body.appendChild(a);
+          a.click();
+          window.URL.revokeObjectURL(url);
+          document.body.removeChild(a);
+        } else {
+          alert('Fehler beim Erstellen des PDFs.');
+        }
+      } catch (error) {
+        console.error('Fehler:', error);
+        alert('Netzwerkfehler beim Erstellen des PDFs.');
+      }
+    }
+
+    // Validate that all rows with names have a status selected
+    function validateAttendance() {
+      const rows = document.querySelectorAll('#attendance-tbody tr');
+      const errors = [];
+      let hasAnyData = false;
+
+      rows.forEach((row, index) => {
+        const name = row.querySelector('.name-input')?.value.trim() || '';
+        const status = row.querySelector('input[type="radio"]:checked')?.value || '';
+        const bemerkung = row.querySelector('.bemerkung-column input')?.value.trim() || '';
+
+        // Check if there's any data in the form
+        if (name || status || bemerkung) {
+          hasAnyData = true;
+        }
+
+        // If there's a name, status must be selected
+        if (name && !status) {
+          errors.push(`Zeile ${index + 1}: Bitte wählen Sie einen Anwesenheitsstatus für "${name}"`);
+        }
+      });
+
+      // If no data at all, add error
+      if (!hasAnyData) {
+        errors.push('Es gibt keine Daten zum Versenden. Bitte fügen Sie mindestens einen Teilnehmer hinzu.');
+      }
+
+      return errors;
+    }
+
+    // Send email with PDF
+    async function sendEmail() {
+      // Validate attendance status
+      const validationErrors = validateAttendance();
+      if (validationErrors.length > 0) {
+        alert('Bitte korrigieren Sie folgende Fehler:\n\n' + validationErrors.join('\n'));
+        return;
+      }
+
+      // Collect the data
+      const data = {
+        datum: document.getElementById('datum').value,
+        thema: document.getElementById('thema').value,
+        dienstleiter: document.getElementById('dienstleiter').value,
+        teilnehmer: []
+      };
+
+      const rows = document.querySelectorAll('#attendance-tbody tr');
+      rows.forEach((row, index) => {
+        const nr = index + 1;
+        const name = row.querySelector('.name-input')?.value || '';
+        const status = row.querySelector('input[type="radio"]:checked')?.value || '';
+        const bemerkung = row.querySelector('.bemerkung-column input')?.value || '';
+
+        if (name || status || bemerkung) {
+          data.teilnehmer.push({
+            nr: nr,
+            name: name,
+            status: status,
+            bemerkung: bemerkung
+          });
+        }
+      });
+
+      try {
+        const response = await fetch(`${SERVER_URL}/anwesenheit/email`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+
+        if (response.ok) {
+          alert('E-Mail erfolgreich versendet!');
+        } else {
+          const error = await response.json();
+          alert(`Fehler beim Versenden der E-Mail: ${error.error || 'Unbekannter Fehler'}`);
+        }
+      } catch (error) {
+        console.error('Fehler:', error);
+        alert('Netzwerkfehler beim Versenden der E-Mail.');
+      }
+    }
+
+    // Reset form - clear all data and go back to default
+    async function resetForm() {
+      if (confirm('Sind Sie sicher, dass Sie alle Daten zurücksetzen möchten?')) {
+        // Delete draft from server
+        try {
+          await fetch(`${SERVER_URL}/anwesenheit/draft`, { method: 'DELETE' });
+        } catch (error) {
+          console.error('Fehler beim Löschen des Entwurfs:', error);
+        }
+
+        // Reset header fields
+        const today = new Date().toISOString().split('T')[0];
+        document.getElementById('datum').value = today;
+        document.getElementById('thema').value = '';
+        document.getElementById('dienstleiter').value = '';
+
+        // Clear all rows
+        const tbody = document.getElementById('attendance-tbody');
+        tbody.innerHTML = '';
+
+        // Reset row counter
+        rowCounter = 1;
+
+        // Add one empty row
+        addRow();
+
+        // Trigger auto-save to save empty state
+        triggerAutoSave();
+      }
+    }
+
+    // Initialize on page load
+    document.addEventListener('DOMContentLoaded', async function() {
+      // Load names first
+      await loadNames();
+
+      // Load draft or initialize with empty form
+      await loadDraft();
+
+      // Add auto-save triggers to header fields
+      document.getElementById('datum').addEventListener('change', triggerAutoSave);
+      document.getElementById('thema').addEventListener('input', triggerAutoSave);
+      document.getElementById('dienstleiter').addEventListener('input', triggerAutoSave);
+    });
+  </script>
+</body>
+</html>
