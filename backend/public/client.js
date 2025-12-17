@@ -308,6 +308,34 @@ function getFahrzeugName(typ) {
   return fahrzeugNamen[typ];
 }
 
+// Zeige Speicher-Benachrichtigung
+function showSaveNotification(message, isError = false) {
+  // Erstelle Notification-Element falls nicht vorhanden
+  let notification = document.getElementById('save-notification');
+  if (!notification) {
+    notification = document.createElement('div');
+    notification.id = 'save-notification';
+    notification.className = 'save-notification';
+    document.body.appendChild(notification);
+  }
+
+  // Setze Nachricht und Stil
+  notification.textContent = message;
+  if (isError) {
+    notification.classList.add('error');
+  } else {
+    notification.classList.remove('error');
+  }
+
+  // Zeige Notification
+  notification.classList.add('show');
+
+  // Verstecke nach 3 Sekunden
+  setTimeout(() => {
+    notification.classList.remove('show');
+  }, 3000);
+}
+
 function saveDataLocal() {
   const dataToSave = {
     einsatz: {
@@ -344,7 +372,7 @@ function saveDataLocal() {
 // Hauptfunktion: Speichern der Daten
 async function saveData() {
   saveDataLocal();
-  
+
   const besatzungenArray = [];
   getSelectedFahrzeuge().forEach(fahrzeugTyp => {
     besatzungen[fahrzeugTyp].forEach(member => {
@@ -358,7 +386,7 @@ async function saveData() {
       });
     });
   });
-  
+
   const einsatzData = {
     einsatznummer: currentEinsatzId,
     datum: document.getElementById('info-datum').textContent,
@@ -372,25 +400,27 @@ async function saveData() {
     })),
     besatzungen: besatzungenArray
   };
-  
+
   try {
     const response = await fetch(`${SERVER_URL}/einsatz`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(einsatzData)
     });
-    
+
     if (response.ok) {
       console.log('Daten erfolgreich gespeichert');
+      showSaveNotification('✓ Daten erfolgreich gespeichert');
       return true;
     } else {
       const error = await response.json();
       console.error(`Fehler beim Speichern: ${error.error}`);
+      showSaveNotification('✗ Fehler beim Speichern', true);
       return false;
     }
   } catch (error) {
     console.error('Fehler beim Speichern:', error);
-    alert('Netzwerkfehler beim Speichern. Daten wurden lokal gespeichert.');
+    showSaveNotification('⚠ Netzwerkfehler - Lokal gespeichert', true);
     return false;
   }
 }
