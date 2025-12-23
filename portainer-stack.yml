@@ -37,8 +37,10 @@ services:
       - SMTP_USER=${SMTP_USER}
       - SMTP_PASS=${SMTP_PASS}
       - DELETE_PASSWORD=${DELETE_PASSWORD}
-      - EMAIL_RECIPIENTS=${EMAIL_RECIPIENTS}
+      # E-Mail-Empfänger
+      - EMAIL_RECIPIENTS_BERICHT=${EMAIL_RECIPIENTS_BERICHT}
       - EMAIL_RECIPIENTS_ANWESENHEIT=${EMAIL_RECIPIENTS_ANWESENHEIT}
+      - EMAIL_RECIPIENTS_SONDER=${EMAIL_RECIPIENTS_SONDER}
       # Namensliste (in Portainer als Stack-Variable setzen!)
       - NAMEN=${NAMEN}
       # Fahrzeugkonfiguration (siehe .env.portainer.example für alle Variablen)
