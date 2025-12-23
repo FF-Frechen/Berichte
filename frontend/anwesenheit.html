@@ -449,6 +449,8 @@
               data.draft.teilnehmer.forEach(person => {
                 addRowWithData(person);
               });
+              // Add empty row after loaded data for new entries
+              addRow();
             } else {
               // Add empty row if no data
               addRow();
