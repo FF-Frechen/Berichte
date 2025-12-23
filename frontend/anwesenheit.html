@@ -403,7 +403,8 @@
         datum: document.getElementById('datum').value,
         thema: document.getElementById('thema').value,
         dienstleiter: document.getElementById('dienstleiter').value,
-        teilnehmer: []
+        teilnehmer: [],
+        type: 'dienste'
       };
 
       const rows = document.querySelectorAll('#attendance-tbody tr');
@@ -429,7 +430,7 @@
     // Load draft on page load
     async function loadDraft() {
       try {
-        const response = await fetch(`${SERVER_URL}/anwesenheit/draft`);
+        const response = await fetch(`${SERVER_URL}/anwesenheit/draft?type=dienste`);
         if (response.ok) {
           const data = await response.json();
 
@@ -449,6 +450,8 @@
               data.draft.teilnehmer.forEach(person => {
                 addRowWithData(person);
               });
+              // Add empty row after loaded data for new entries
+              addRow();
             } else {
               // Add empty row if no data
               addRow();
@@ -892,7 +895,7 @@
       if (confirm('Sind Sie sicher, dass Sie alle Daten zurücksetzen möchten?')) {
         // Delete draft from server
         try {
-          await fetch(`${SERVER_URL}/anwesenheit/draft`, { method: 'DELETE' });
+          await fetch(`${SERVER_URL}/anwesenheit/draft?type=dienste`, { method: 'DELETE' });
         } catch (error) {
           console.error('Fehler beim Löschen des Entwurfs:', error);
         }
