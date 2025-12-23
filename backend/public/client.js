@@ -139,36 +139,47 @@ function initializeNewEinsatz(einsatznummer, params) {
 }
 
 function applyEinsatzData(data) {
-  const einsatz = data.einsatz;
-  const fahrzeuge = data.fahrzeuge || [];
-  const besatzungenData = data.besatzungen || [];
-  
-  currentEinsatzId = einsatz.einsatznummer;
-  
-  document.getElementById('info-einsatznummer').textContent = einsatz.einsatznummer;
-  document.getElementById('info-datum').textContent = einsatz.datum;
-  document.getElementById('info-uhrzeit').textContent = einsatz.uhrzeit;
-  document.getElementById('info-einsatzstelle').textContent = einsatz.einsatzstelle;
-  document.getElementById('info-einsatzleiter').textContent = einsatz.einsatzleiter || '-';
-  
-  fahrzeuge.forEach(f => {
-    const checkbox = document.getElementById(`fahrzeug-${f.fahrzeug}`);
-    if (checkbox) checkbox.checked = true;
-    const bereitCheckbox = document.getElementById(`bereit-${f.fahrzeug}`);
-    if (bereitCheckbox) bereitCheckbox.checked = f.bereitstellung;
-  });
-  
-  besatzungenData.forEach(b => {
-    const member = besatzungen[b.fahrzeug]?.find(m => m.position === b.position);
-    if (member) {
-      member.name = b.name || "";
-      member.signature = b.signature || null;
-      member.pa = b.pa || false;
-      member.paMinuten = b.paMinuten || "";
-    }
-  });
-  
-  updateFahrzeugTables();
+  try {
+    const einsatz = data.einsatz;
+    const fahrzeuge = data.fahrzeuge || [];
+    const besatzungenData = data.besatzungen || [];
+
+    currentEinsatzId = einsatz.einsatznummer;
+
+    document.getElementById('info-einsatznummer').textContent = einsatz.einsatznummer;
+    document.getElementById('info-datum').textContent = einsatz.datum;
+    document.getElementById('info-uhrzeit').textContent = einsatz.uhrzeit;
+    document.getElementById('info-einsatzstelle').textContent = einsatz.einsatzstelle;
+    document.getElementById('info-einsatzleiter').textContent = einsatz.einsatzleiter || '-';
+
+    fahrzeuge.forEach(f => {
+      const checkbox = document.getElementById(`fahrzeug-${f.fahrzeug}`);
+      if (checkbox) checkbox.checked = true;
+      const bereitCheckbox = document.getElementById(`bereit-${f.fahrzeug}`);
+      if (bereitCheckbox) bereitCheckbox.checked = f.bereitstellung;
+    });
+
+    besatzungenData.forEach(b => {
+      // Prüfe ob das Fahrzeug in der aktuellen Konfiguration existiert
+      if (!besatzungen[b.fahrzeug]) {
+        console.warn(`Fahrzeug ${b.fahrzeug} nicht in aktueller Konfiguration gefunden - überspringe`);
+        return;
+      }
+
+      const member = besatzungen[b.fahrzeug].find(m => m.position === b.position);
+      if (member) {
+        member.name = b.name || "";
+        member.signature = b.signature || null;
+        member.pa = b.pa || false;
+        member.paMinuten = b.paMinuten || "";
+      }
+    });
+
+    updateFahrzeugTables();
+  } catch (error) {
+    console.error('Fehler in applyEinsatzData:', error);
+    throw error; // Re-throw damit es vom Aufrufer behandelt wird
+  }
 }
 
 function updateFahrzeugTables() {
@@ -308,6 +319,34 @@ function getFahrzeugName(typ) {
   return fahrzeugNamen[typ];
 }
 
+// Zeige Speicher-Benachrichtigung
+function showSaveNotification(message, isError = false) {
+  // Erstelle Notification-Element falls nicht vorhanden
+  let notification = document.getElementById('save-notification');
+  if (!notification) {
+    notification = document.createElement('div');
+    notification.id = 'save-notification';
+    notification.className = 'save-notification';
+    document.body.appendChild(notification);
+  }
+
+  // Setze Nachricht und Stil
+  notification.textContent = message;
+  if (isError) {
+    notification.classList.add('error');
+  } else {
+    notification.classList.remove('error');
+  }
+
+  // Zeige Notification
+  notification.classList.add('show');
+
+  // Verstecke nach 3 Sekunden
+  setTimeout(() => {
+    notification.classList.remove('show');
+  }, 3000);
+}
+
 function saveDataLocal() {
   const dataToSave = {
     einsatz: {
@@ -344,7 +383,7 @@ function saveDataLocal() {
 // Hauptfunktion: Speichern der Daten
 async function saveData() {
   saveDataLocal();
-  
+
   const besatzungenArray = [];
   getSelectedFahrzeuge().forEach(fahrzeugTyp => {
     besatzungen[fahrzeugTyp].forEach(member => {
@@ -358,7 +397,7 @@ async function saveData() {
       });
     });
   });
-  
+
   const einsatzData = {
     einsatznummer: currentEinsatzId,
     datum: document.getElementById('info-datum').textContent,
@@ -372,25 +411,27 @@ async function saveData() {
     })),
     besatzungen: besatzungenArray
   };
-  
+
   try {
     const response = await fetch(`${SERVER_URL}/einsatz`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(einsatzData)
     });
-    
+
     if (response.ok) {
       console.log('Daten erfolgreich gespeichert');
+      showSaveNotification('✓ Daten erfolgreich gespeichert');
       return true;
     } else {
       const error = await response.json();
       console.error(`Fehler beim Speichern: ${error.error}`);
+      showSaveNotification('✗ Fehler beim Speichern', true);
       return false;
     }
   } catch (error) {
     console.error('Fehler beim Speichern:', error);
-    alert('Netzwerkfehler beim Speichern. Daten wurden lokal gespeichert.');
+    showSaveNotification('⚠ Netzwerkfehler - Lokal gespeichert', true);
     return false;
   }
 }
