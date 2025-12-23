@@ -22,7 +22,6 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    image: feuerwehr-backend:latest
     container_name: feuerwehr-backend
     restart: unless-stopped
     user: "0:0"

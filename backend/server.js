@@ -1215,7 +1215,7 @@ app.post('/api/anwesenheit/pdf', async (req, res) => {
 
             // Draw row background (alternating)
             if (index % 2 === 0) {
-                doc.rect(xPos, yPos, colWidths.nr + colWidths.name + colWidths.anwesend + colWidths.nichtAnwesend + colWidths.entschuldigt + colWidths.bemerkung, rowHeight).fill('#f8f9fa');
+                doc.rect(xPos, yPos, totalWidth, rowHeight).fill('#f8f9fa');
                 doc.fillColor('black');
             }
 
@@ -1227,29 +1227,31 @@ app.post('/api/anwesenheit/pdf', async (req, res) => {
             doc.text(person.name || '', xPos + 5, yPos + 8, { width: colWidths.name });
             xPos += colWidths.name;
 
-            // Checkboxes for status
-            const checkboxY = yPos + 8;
+            // Checkboxes for status - nur für normale Dienste
+            if (!isSonder) {
+                const checkboxY = yPos + 8;
 
-            // anwesend
-            doc.rect(xPos + 25, checkboxY, 10, 10).stroke();
-            if (person.status === 'anwesend') {
-                doc.text('X', xPos + 27, checkboxY + 1);
-            }
-            xPos += colWidths.anwesend;
+                // anwesend
+                doc.rect(xPos + 25, checkboxY, 10, 10).stroke();
+                if (person.status === 'anwesend') {
+                    doc.text('X', xPos + 27, checkboxY + 1);
+                }
+                xPos += colWidths.anwesend;
 
-            // nicht anwesend
-            doc.rect(xPos + 15, checkboxY, 10, 10).stroke();
-            if (person.status === 'nicht_anwesend') {
-                doc.text('X', xPos + 17, checkboxY + 1);
-            }
-            xPos += colWidths.nichtAnwesend;
+                // nicht anwesend
+                doc.rect(xPos + 15, checkboxY, 10, 10).stroke();
+                if (person.status === 'nicht_anwesend') {
+                    doc.text('X', xPos + 17, checkboxY + 1);
+                }
+                xPos += colWidths.nichtAnwesend;
 
-            // entschuldigt
-            doc.rect(xPos + 18, checkboxY, 10, 10).stroke();
-            if (person.status === 'entschuldigt') {
-                doc.text('X', xPos + 20, checkboxY + 1);
+                // entschuldigt
+                doc.rect(xPos + 18, checkboxY, 10, 10).stroke();
+                if (person.status === 'entschuldigt') {
+                    doc.text('X', xPos + 20, checkboxY + 1);
+                }
+                xPos += colWidths.entschuldigt;
             }
-            xPos += colWidths.entschuldigt;
 
             // Bemerkung
             doc.text(person.bemerkung || '', xPos + 5, yPos + 8, { width: colWidths.bemerkung });
@@ -1311,13 +1313,16 @@ app.post('/api/anwesenheit/email', async (req, res) => {
                 const pdfBuffer = Buffer.concat(chunks);
 
                 // Send email
+                const emailSubject = isSonder ? `Sonderdienst vom ${datum}${thema ? ' - ' + thema : ''}` : `Anwesenheitsliste vom ${datum}${thema ? ' - ' + thema : ''}`;
+                const emailFilename = isSonder ? `Sonderdienst_${datum}.pdf` : `Anwesenheitsliste_${datum}.pdf`;
+
                 const mailOptions = {
                     from: SMTP_CONFIG.auth.user,
                     to: recipients,
-                    subject: `Anwesenheitsliste vom ${datum}${thema ? ' - ' + thema : ''}`,
-                    text: `Anbei finden Sie die Anwesenheitsliste vom ${datum}.\n\nThema: ${thema || 'Nicht angegeben'}\nDienstleiter: ${dienstleiter || 'Nicht angegeben'}\nTeilnehmer: ${teilnehmer.length}`,
+                    subject: emailSubject,
+                    text: `Anbei finden Sie ${isSonder ? 'den Sonderdienst' : 'die Anwesenheitsliste'} vom ${datum}.\n\nThema: ${thema || 'Nicht angegeben'}\nDienstleiter: ${dienstleiter || 'Nicht angegeben'}\nTeilnehmer: ${teilnehmer.length}`,
                     attachments: [{
-                        filename: `Anwesenheitsliste_${datum}.pdf`,
+                        filename: emailFilename,
                         content: pdfBuffer
                     }]
                 };
@@ -1335,8 +1340,11 @@ app.post('/api/anwesenheit/email', async (req, res) => {
         });
 
         // Generate PDF content
-        // Header
-        doc.fontSize(18).font('Helvetica-Bold').text('Anwesenheitsliste Dienst LZ Frechen', { align: 'center' });
+        // Header - unterschiedlich je nach Type
+        const isSonder = type === 'sonder';
+        const title = isSonder ? 'Sonderdienst LZ Frechen' : 'Anwesenheitsliste Dienst LZ Frechen';
+
+        doc.fontSize(18).font('Helvetica-Bold').text(title, { align: 'center' });
         doc.moveDown(0.5);
         doc.fontSize(10).font('Helvetica').text(`Stand ${new Date().toLocaleDateString('de-DE')}`, { align: 'right' });
         doc.moveDown(1);
@@ -1349,25 +1357,38 @@ app.post('/api/anwesenheit/email', async (req, res) => {
         doc.text(`Dienstleiter: ${dienstleiter || ''}`, 50, doc.y);
         doc.moveDown(1.5);
 
-        // Table header
+        // Table header - unterschiedlich je nach Type
         const tableTop = doc.y;
-        const colWidths = { nr: 35, name: 160, anwesend: 60, nichtAnwesend: 80, entschuldigt: 80, bemerkung: 130 };
+        const colWidths = isSonder
+            ? { nr: 35, name: 200, bemerkung: 310 }  // Sonderdienst: Keine Anwesenheit-Spalten
+            : { nr: 35, name: 160, anwesend: 60, nichtAnwesend: 80, entschuldigt: 80, bemerkung: 130 };  // Normal: Mit Anwesenheit
         let xPos = 50;
 
         doc.fontSize(9).font('Helvetica-Bold');
-        doc.rect(xPos, tableTop, colWidths.nr + colWidths.name + colWidths.anwesend + colWidths.nichtAnwesend + colWidths.entschuldigt + colWidths.bemerkung, 25).fill('#003049');
+
+        // Berechne Gesamtbreite abhängig vom Type
+        const totalWidth = isSonder
+            ? colWidths.nr + colWidths.name + colWidths.bemerkung
+            : colWidths.nr + colWidths.name + colWidths.anwesend + colWidths.nichtAnwesend + colWidths.entschuldigt + colWidths.bemerkung;
+
+        doc.rect(xPos, tableTop, totalWidth, 25).fill('#003049');
 
         doc.fillColor('white');
         doc.text('Nr.', xPos + 5, tableTop + 8, { width: colWidths.nr - 10, align: 'center' });
         xPos += colWidths.nr;
         doc.text('Name', xPos + 5, tableTop + 8, { width: colWidths.name - 10 });
         xPos += colWidths.name;
-        doc.text('anwesend', xPos + 5, tableTop + 8, { width: colWidths.anwesend - 10, align: 'center' });
-        xPos += colWidths.anwesend;
-        doc.text('nicht\nanwesend', xPos + 5, tableTop + 4, { width: colWidths.nichtAnwesend - 10, align: 'center' });
-        xPos += colWidths.nichtAnwesend;
-        doc.text('entschuldigt', xPos + 5, tableTop + 8, { width: colWidths.entschuldigt - 10, align: 'center' });
-        xPos += colWidths.entschuldigt;
+
+        // Nur für normale Dienste: Anwesenheit-Spalten
+        if (!isSonder) {
+            doc.text('anwesend', xPos + 5, tableTop + 8, { width: colWidths.anwesend - 10, align: 'center' });
+            xPos += colWidths.anwesend;
+            doc.text('nicht\nanwesend', xPos + 5, tableTop + 4, { width: colWidths.nichtAnwesend - 10, align: 'center' });
+            xPos += colWidths.nichtAnwesend;
+            doc.text('entschuldigt', xPos + 5, tableTop + 8, { width: colWidths.entschuldigt - 10, align: 'center' });
+            xPos += colWidths.entschuldigt;
+        }
+
         doc.text('Bemerkung / Info', xPos + 5, tableTop + 8, { width: colWidths.bemerkung - 10 });
 
         doc.fillColor('black');
@@ -1386,7 +1407,7 @@ app.post('/api/anwesenheit/email', async (req, res) => {
 
             // Draw row background (alternating)
             if (index % 2 === 0) {
-                doc.rect(xPos, yPos, colWidths.nr + colWidths.name + colWidths.anwesend + colWidths.nichtAnwesend + colWidths.entschuldigt + colWidths.bemerkung, rowHeight).fill('#f8f9fa');
+                doc.rect(xPos, yPos, totalWidth, rowHeight).fill('#f8f9fa');
                 doc.fillColor('black');
             }
 
@@ -1398,29 +1419,31 @@ app.post('/api/anwesenheit/email', async (req, res) => {
             doc.text(person.name || '', xPos + 5, yPos + 8, { width: colWidths.name });
             xPos += colWidths.name;
 
-            // Checkboxes for status
-            const checkboxY = yPos + 8;
+            // Checkboxes for status - nur für normale Dienste
+            if (!isSonder) {
+                const checkboxY = yPos + 8;
 
-            // anwesend
-            doc.rect(xPos + 25, checkboxY, 10, 10).stroke();
-            if (person.status === 'anwesend') {
-                doc.text('X', xPos + 27, checkboxY + 1);
-            }
-            xPos += colWidths.anwesend;
+                // anwesend
+                doc.rect(xPos + 25, checkboxY, 10, 10).stroke();
+                if (person.status === 'anwesend') {
+                    doc.text('X', xPos + 27, checkboxY + 1);
+                }
+                xPos += colWidths.anwesend;
 
-            // nicht anwesend
-            doc.rect(xPos + 15, checkboxY, 10, 10).stroke();
-            if (person.status === 'nicht_anwesend') {
-                doc.text('X', xPos + 17, checkboxY + 1);
-            }
-            xPos += colWidths.nichtAnwesend;
+                // nicht anwesend
+                doc.rect(xPos + 15, checkboxY, 10, 10).stroke();
+                if (person.status === 'nicht_anwesend') {
+                    doc.text('X', xPos + 17, checkboxY + 1);
+                }
+                xPos += colWidths.nichtAnwesend;
 
-            // entschuldigt
-            doc.rect(xPos + 18, checkboxY, 10, 10).stroke();
-            if (person.status === 'entschuldigt') {
-                doc.text('X', xPos + 20, checkboxY + 1);
+                // entschuldigt
+                doc.rect(xPos + 18, checkboxY, 10, 10).stroke();
+                if (person.status === 'entschuldigt') {
+                    doc.text('X', xPos + 20, checkboxY + 1);
+                }
+                xPos += colWidths.entschuldigt;
             }
-            xPos += colWidths.entschuldigt;
 
             // Bemerkung
             doc.text(person.bemerkung || '', xPos + 5, yPos + 8, { width: colWidths.bemerkung });
