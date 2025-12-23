@@ -51,12 +51,16 @@ fi
 echo "✓ Alle Umgebungsvariablen geladen"
 echo "✓ Anzahl Namen: $(echo "$NAMEN" | awk -F',' '{print NF}')"
 
-if [ -n "$EMAIL_RECIPIENTS" ]; then
-    echo "✓ E-Mail-Empfänger (Einsatzberichte): $(echo "$EMAIL_RECIPIENTS" | awk -F',' '{print NF}')"
+if [ -n "$EMAIL_RECIPIENTS_BERICHT" ]; then
+    echo "✓ E-Mail-Empfänger (Einsatzberichte): $(echo "$EMAIL_RECIPIENTS_BERICHT" | awk -F',' '{print NF}')"
 fi
 
 if [ -n "$EMAIL_RECIPIENTS_ANWESENHEIT" ]; then
     echo "✓ E-Mail-Empfänger (Anwesenheitslisten): $(echo "$EMAIL_RECIPIENTS_ANWESENHEIT" | awk -F',' '{print NF}')"
+fi
+
+if [ -n "$EMAIL_RECIPIENTS_SONDER" ]; then
+    echo "✓ E-Mail-Empfänger (Sonderdienste): $(echo "$EMAIL_RECIPIENTS_SONDER" | awk -F',' '{print NF}')"
 fi
 
 # Zähle konfigurierte Fahrzeuge

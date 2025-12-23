@@ -1,11 +1,11 @@
 
 FROM nginx:alpine
 
-# Kopiere Frontend-Dateien
-COPY frontend/ /usr/share/nginx/html
-
 # Kopiere Nginx-Konfiguration
-COPY nginx/nginx.conf /etc/nginx/conf.d/default.conf
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+# Kopiere Frontend-Dateien
+COPY ./ /usr/share/nginx/html
 
 # Setze Rechte
 RUN chmod -R 755 /usr/share/nginx/html
