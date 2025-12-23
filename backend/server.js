@@ -1087,16 +1087,20 @@ app.post('/api/anwesenheit', (req, res) => {
     );
 });
 
-// Auto-save draft (upsert with fixed ID 'draft')
+// Auto-save draft (upsert with fixed ID 'draft' or 'draft-sonder')
 app.post('/api/anwesenheit/draft', (req, res) => {
-    const { datum, thema, dienstleiter, teilnehmer } = req.body;
+    const { datum, thema, dienstleiter, teilnehmer, type } = req.body;
+
+    // Determine draft ID based on type
+    const draftId = type === 'sonder' ? 'draft-sonder' : 'draft-dienste';
 
     const stmt = db.prepare(`
         INSERT OR REPLACE INTO anwesenheitslisten (id, datum, thema, dienstleiter, teilnehmer, erstellt_am)
-        VALUES ('draft', ?, ?, ?, ?, datetime('now'))
+        VALUES (?, ?, ?, ?, ?, datetime('now'))
     `);
 
     stmt.run(
+        draftId,
         datum || '',
         thema || '',
         dienstleiter || '',
@@ -1113,7 +1117,10 @@ app.post('/api/anwesenheit/draft', (req, res) => {
 
 // Get draft
 app.get('/api/anwesenheit/draft', (req, res) => {
-    db.get('SELECT * FROM anwesenheitslisten WHERE id = ?', ['draft'], (err, row) => {
+    const type = req.query.type;
+    const draftId = type === 'sonder' ? 'draft-sonder' : 'draft-dienste';
+
+    db.get('SELECT * FROM anwesenheitslisten WHERE id = ?', [draftId], (err, row) => {
         if (err) {
             console.error('Fehler beim Laden des Entwurfs:', err);
             return res.status(500).json({ error: 'Fehler beim Laden des Entwurfs.' });
@@ -1136,7 +1143,10 @@ app.get('/api/anwesenheit/draft', (req, res) => {
 
 // Delete draft
 app.delete('/api/anwesenheit/draft', (req, res) => {
-    db.run('DELETE FROM anwesenheitslisten WHERE id = ?', ['draft'], function(err) {
+    const type = req.query.type;
+    const draftId = type === 'sonder' ? 'draft-sonder' : 'draft-dienste';
+
+    db.run('DELETE FROM anwesenheitslisten WHERE id = ?', [draftId], function(err) {
         if (err) {
             console.error('Fehler beim Löschen des Entwurfs:', err);
             return res.status(500).json({ error: 'Fehler beim Löschen des Entwurfs.' });
