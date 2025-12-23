@@ -139,36 +139,47 @@ function initializeNewEinsatz(einsatznummer, params) {
 }
 
 function applyEinsatzData(data) {
-  const einsatz = data.einsatz;
-  const fahrzeuge = data.fahrzeuge || [];
-  const besatzungenData = data.besatzungen || [];
-  
-  currentEinsatzId = einsatz.einsatznummer;
-  
-  document.getElementById('info-einsatznummer').textContent = einsatz.einsatznummer;
-  document.getElementById('info-datum').textContent = einsatz.datum;
-  document.getElementById('info-uhrzeit').textContent = einsatz.uhrzeit;
-  document.getElementById('info-einsatzstelle').textContent = einsatz.einsatzstelle;
-  document.getElementById('info-einsatzleiter').textContent = einsatz.einsatzleiter || '-';
-  
-  fahrzeuge.forEach(f => {
-    const checkbox = document.getElementById(`fahrzeug-${f.fahrzeug}`);
-    if (checkbox) checkbox.checked = true;
-    const bereitCheckbox = document.getElementById(`bereit-${f.fahrzeug}`);
-    if (bereitCheckbox) bereitCheckbox.checked = f.bereitstellung;
-  });
-  
-  besatzungenData.forEach(b => {
-    const member = besatzungen[b.fahrzeug]?.find(m => m.position === b.position);
-    if (member) {
-      member.name = b.name || "";
-      member.signature = b.signature || null;
-      member.pa = b.pa || false;
-      member.paMinuten = b.paMinuten || "";
-    }
-  });
-  
-  updateFahrzeugTables();
+  try {
+    const einsatz = data.einsatz;
+    const fahrzeuge = data.fahrzeuge || [];
+    const besatzungenData = data.besatzungen || [];
+
+    currentEinsatzId = einsatz.einsatznummer;
+
+    document.getElementById('info-einsatznummer').textContent = einsatz.einsatznummer;
+    document.getElementById('info-datum').textContent = einsatz.datum;
+    document.getElementById('info-uhrzeit').textContent = einsatz.uhrzeit;
+    document.getElementById('info-einsatzstelle').textContent = einsatz.einsatzstelle;
+    document.getElementById('info-einsatzleiter').textContent = einsatz.einsatzleiter || '-';
+
+    fahrzeuge.forEach(f => {
+      const checkbox = document.getElementById(`fahrzeug-${f.fahrzeug}`);
+      if (checkbox) checkbox.checked = true;
+      const bereitCheckbox = document.getElementById(`bereit-${f.fahrzeug}`);
+      if (bereitCheckbox) bereitCheckbox.checked = f.bereitstellung;
+    });
+
+    besatzungenData.forEach(b => {
+      // Prüfe ob das Fahrzeug in der aktuellen Konfiguration existiert
+      if (!besatzungen[b.fahrzeug]) {
+        console.warn(`Fahrzeug ${b.fahrzeug} nicht in aktueller Konfiguration gefunden - überspringe`);
+        return;
+      }
+
+      const member = besatzungen[b.fahrzeug].find(m => m.position === b.position);
+      if (member) {
+        member.name = b.name || "";
+        member.signature = b.signature || null;
+        member.pa = b.pa || false;
+        member.paMinuten = b.paMinuten || "";
+      }
+    });
+
+    updateFahrzeugTables();
+  } catch (error) {
+    console.error('Fehler in applyEinsatzData:', error);
+    throw error; // Re-throw damit es vom Aufrufer behandelt wird
+  }
 }
 
 function updateFahrzeugTables() {
