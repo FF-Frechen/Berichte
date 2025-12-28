@@ -1001,7 +1001,7 @@ app.post('/api/pdf/email', async (req, res) => {
             
             const mailOptions = {
                 from: SMTP_CONFIG.auth.user,
-                to: recipients.join(','),
+                bcc: recipients.join(','), // BCC statt TO für Datenschutz - Empfänger sehen sich nicht
                 subject: subject,
                 text: message,
                 attachments: [
@@ -1011,10 +1011,10 @@ app.post('/api/pdf/email', async (req, res) => {
                     }
                 ]
             };
-            
+
             console.log('[EMAIL] Mail-Optionen:', JSON.stringify({
                 from: mailOptions.from,
-                to: mailOptions.to,
+                bcc: mailOptions.bcc,
                 subject: mailOptions.subject,
                 attachmentCount: mailOptions.attachments.length
             }, null, 2));
@@ -1378,7 +1378,7 @@ app.post('/api/anwesenheit/email', async (req, res) => {
 
                 const mailOptions = {
                     from: SMTP_CONFIG.auth.user,
-                    to: recipients,
+                    bcc: recipients, // BCC statt TO für Datenschutz - Empfänger sehen sich nicht
                     subject: emailSubject,
                     text: `Anbei finden Sie ${isSonder ? 'den Sonderdienst' : 'die Anwesenheitsliste'} vom ${datum}.\n\nThema: ${thema || 'Nicht angegeben'}\nDienstleiter: ${dienstleiter || 'Nicht angegeben'}\nTeilnehmer: ${teilnehmer.length}`,
                     attachments: [{
@@ -1387,7 +1387,7 @@ app.post('/api/anwesenheit/email', async (req, res) => {
                     }]
                 };
 
-                console.log('[ANWESENHEIT EMAIL] Sende E-Mail an:', recipients);
+                console.log('[ANWESENHEIT EMAIL] Sende E-Mail (BCC) an:', recipients);
 
                 await mailTransporter.sendMail(mailOptions);
 
