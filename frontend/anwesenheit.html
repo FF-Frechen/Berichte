@@ -531,7 +531,7 @@
           </div>
         </td>
         <td class="bemerkung-column">
-          <input type="text" data-row="${nr}">
+          <input type="text" data-row="${nr}" maxlength="35" placeholder="max. 35 Zeichen">
         </td>
       `;
 
@@ -578,7 +578,7 @@
           </div>
         </td>
         <td class="bemerkung-column">
-          <input type="text" data-row="${nr}" value="${person.bemerkung || ''}">
+          <input type="text" data-row="${nr}" value="${person.bemerkung || ''}" maxlength="35" placeholder="max. 35 Zeichen">
         </td>
       `;
 

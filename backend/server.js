@@ -1301,11 +1301,9 @@ app.post('/api/anwesenheit/pdf', async (req, res) => {
                 xPos += colWidths.entschuldigt;
             }
 
-            // Bemerkung - begrenzt auf Zeilenhöhe mit Ellipsis
+            // Bemerkung
             doc.text(person.bemerkung || '', xPos + 5, yPos + 8, {
-                width: colWidths.bemerkung - 10,
-                height: rowHeight - 16,
-                ellipsis: true
+                width: colWidths.bemerkung - 10
             });
 
             yPos += rowHeight;
@@ -1497,11 +1495,9 @@ app.post('/api/anwesenheit/email', async (req, res) => {
                 xPos += colWidths.entschuldigt;
             }
 
-            // Bemerkung - begrenzt auf Zeilenhöhe mit Ellipsis
+            // Bemerkung
             doc.text(person.bemerkung || '', xPos + 5, yPos + 8, {
-                width: colWidths.bemerkung - 10,
-                height: rowHeight - 16,
-                ellipsis: true
+                width: colWidths.bemerkung - 10
             });
 
             yPos += rowHeight;
