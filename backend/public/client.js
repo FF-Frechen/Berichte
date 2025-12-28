@@ -750,10 +750,12 @@ function closeAllLists(elmnt) {
 
 // Signature Modal Funktionen
 function openSignatureModal(fahrzeugTyp, index, position, row) {
+  closeAllLists(); // Schließe Autocomplete-Dropdown bevor Modal öffnet
+
   currentFahrzeug = fahrzeugTyp;
   currentPosition = index;
   currentRow = row;
-  
+
   document.getElementById("current-position").textContent = position;
   document.getElementById("signature-modal").style.display = "block";
   
