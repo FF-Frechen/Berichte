@@ -298,6 +298,18 @@
         display: none;
       }
     }
+
+    /* iPad Touch-Optimierungen */
+    input[type="checkbox"] { width: 24px; height: 24px; cursor: pointer; margin: 4px; }
+    button { min-height: 44px; padding: 12px 20px; touch-action: manipulation; }
+    input[type="text"], input[type="date"], input[type="time"], input[type="number"], textarea {
+      padding: 12px;
+      font-size: 16px !important; /* Verhindert Auto-Zoom auf iOS */
+      min-height: 44px;
+    }
+    button:active { transform: scale(0.98); }
+    input:focus, select:focus, textarea:focus { outline: 3px solid #003049; outline-offset: 2px; }
+    .add-row-btn { min-height: 44px; padding: 10px 20px; }
   </style>
 </head>
 <body>

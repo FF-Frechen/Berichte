@@ -337,6 +337,55 @@
     .save-notification.error {
       background-color: #dc3545;
     }
+
+    /* iPad Touch-Optimierungen */
+    /* Größere Touch-Targets für bessere Bedienbarkeit */
+    input[type="checkbox"] {
+      width: 24px;
+      height: 24px;
+      cursor: pointer;
+      margin: 4px;
+    }
+
+    button {
+      min-height: 44px;
+      padding: 12px 20px;
+      font-size: 16px;
+      touch-action: manipulation; /* Verhindert Doppel-Tap-Zoom */
+    }
+
+    input[type="text"],
+    input[type="number"] {
+      padding: 12px;
+      font-size: 16px; /* Verhindert Auto-Zoom auf iOS */
+      min-height: 44px;
+    }
+
+    /* Touch-Feedback */
+    button:active {
+      transform: scale(0.98);
+      background-color: #001d3d;
+    }
+
+    /* Verbesserte Focus-Sichtbarkeit für Tastatur-Navigation */
+    input:focus,
+    select:focus,
+    textarea:focus {
+      outline: 3px solid #003049;
+      outline-offset: 2px;
+    }
+
+    /* Optimierung für Checkboxen-Labels */
+    .fahrzeug-option {
+      min-height: 44px;
+      display: flex;
+      align-items: center;
+    }
+
+    .fahrzeug-option label {
+      cursor: pointer;
+      padding: 8px;
+    }
   </style>
 </head>
 <body>
