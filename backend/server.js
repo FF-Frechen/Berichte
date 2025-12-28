@@ -1228,10 +1228,11 @@ app.post('/api/anwesenheit/pdf', async (req, res) => {
         // Table header
         const tableTop = doc.y;
         const colWidths = { nr: 35, name: 160, anwesend: 60, nichtAnwesend: 80, entschuldigt: 80, bemerkung: 130 };
+        const totalWidth = colWidths.nr + colWidths.name + colWidths.anwesend + colWidths.nichtAnwesend + colWidths.entschuldigt + colWidths.bemerkung;
         let xPos = 50;
 
         doc.fontSize(9).font('Helvetica-Bold');
-        doc.rect(xPos, tableTop, colWidths.nr + colWidths.name + colWidths.anwesend + colWidths.nichtAnwesend + colWidths.entschuldigt + colWidths.bemerkung, 25).fill('#003049');
+        doc.rect(xPos, tableTop, totalWidth, 25).fill('#003049');
 
         doc.fillColor('white');
         doc.text('Nr.', xPos + 5, tableTop + 8, { width: colWidths.nr - 10, align: 'center' });
@@ -1276,7 +1277,7 @@ app.post('/api/anwesenheit/pdf', async (req, res) => {
 
             // Checkboxes for status - nur für normale Dienste
             if (!isSonder) {
-                const checkboxY = yPos + 8;
+                const checkboxY = yPos + 7;  // Besser zentriert in der Zeile
 
                 // anwesend
                 doc.rect(xPos + 25, checkboxY, 10, 10).stroke();
@@ -1300,8 +1301,12 @@ app.post('/api/anwesenheit/pdf', async (req, res) => {
                 xPos += colWidths.entschuldigt;
             }
 
-            // Bemerkung
-            doc.text(person.bemerkung || '', xPos + 5, yPos + 8, { width: colWidths.bemerkung });
+            // Bemerkung - begrenzt auf Zeilenhöhe mit Ellipsis
+            doc.text(person.bemerkung || '', xPos + 5, yPos + 8, {
+                width: colWidths.bemerkung - 10,
+                height: rowHeight - 16,
+                ellipsis: true
+            });
 
             yPos += rowHeight;
         });
@@ -1468,7 +1473,7 @@ app.post('/api/anwesenheit/email', async (req, res) => {
 
             // Checkboxes for status - nur für normale Dienste
             if (!isSonder) {
-                const checkboxY = yPos + 8;
+                const checkboxY = yPos + 7;  // Besser zentriert in der Zeile
 
                 // anwesend
                 doc.rect(xPos + 25, checkboxY, 10, 10).stroke();
@@ -1492,8 +1497,12 @@ app.post('/api/anwesenheit/email', async (req, res) => {
                 xPos += colWidths.entschuldigt;
             }
 
-            // Bemerkung
-            doc.text(person.bemerkung || '', xPos + 5, yPos + 8, { width: colWidths.bemerkung });
+            // Bemerkung - begrenzt auf Zeilenhöhe mit Ellipsis
+            doc.text(person.bemerkung || '', xPos + 5, yPos + 8, {
+                width: colWidths.bemerkung - 10,
+                height: rowHeight - 16,
+                ellipsis: true
+            });
 
             yPos += rowHeight;
         });
