@@ -338,21 +338,21 @@ const generatePDFContent = (doc, einsatzData) => {
     let yPos = margin + 42;
     doc.fontSize(8).font('Helvetica-Bold');
     doc.text('Einsatznummer:', margin, yPos);
-    doc.font('Helvetica').text(einsatzData.einsatznummer || '', margin + 80, yPos);
-    
+    doc.font('Helvetica').text(normalizePDFText(einsatzData.einsatznummer), margin + 80, yPos);
+
     yPos += 12;
     doc.font('Helvetica-Bold').text('Datum:', margin, yPos);
     doc.font('Helvetica').text(einsatzData.datum || '', margin + 80, yPos);
     doc.font('Helvetica-Bold').text('Uhrzeit:', margin + 220, yPos);
     doc.font('Helvetica').text(einsatzData.uhrzeit || '', margin + 260, yPos);
-    
+
     yPos += 12;
     doc.font('Helvetica-Bold').text('Einsatzstelle:', margin, yPos);
-    doc.font('Helvetica').text(einsatzData.einsatzstelle || '', margin + 80, yPos, { width: 600 });
-    
+    doc.font('Helvetica').text(normalizePDFText(einsatzData.einsatzstelle), margin + 80, yPos, { width: 600 });
+
     yPos += 12;
     doc.font('Helvetica-Bold').text('Einsatzleiter:', margin, yPos);
-    doc.font('Helvetica').text(einsatzData.einsatzleiter || '-', margin + 80, yPos);
+    doc.font('Helvetica').text(normalizePDFText(einsatzData.einsatzleiter) || '-', margin + 80, yPos);
     
     yPos += 20;
 
@@ -451,9 +451,9 @@ const generatePDFContent = (doc, einsatzData) => {
             doc.fontSize(7).font('Helvetica-Bold').fillColor('#000');
             doc.text(funktion, xPos + 2, rowY + 3, { width: colWidths[0] - 4 });
             
-            // Name (KOPIERBAR!)
+            // Name (KOPIERBAR! - mit UTF-8 Normalisierung)
             doc.font('Helvetica').fillColor('#000');
-            doc.text(b.name, xPos + colWidths[0] + 2, rowY + 3, { width: colWidths[1] - 4 });
+            doc.text(normalizePDFText(b.name), xPos + colWidths[0] + 2, rowY + 3, { width: colWidths[1] - 4 });
             
             // Unterschrift anzeigen (falls vorhanden)
             if (b.signature && b.signature.trim() !== '') {
