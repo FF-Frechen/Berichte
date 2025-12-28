@@ -259,7 +259,15 @@ async function startEinsatz() {
             einsaetze.forEach(einsatz => {
               const item = document.createElement("div");
               item.className = "recent-item";
-              item.innerHTML = `<strong>${einsatz.einsatznummer}</strong><small>${einsatz.einsatzstelle} - ${einsatz.datum} ${einsatz.uhrzeit}</small>`;
+
+              // XSS-Fix: DOM-Methoden statt innerHTML mit Template Literals
+              const strong = document.createElement("strong");
+              strong.textContent = einsatz.einsatznummer;
+              const small = document.createElement("small");
+              small.textContent = `${einsatz.einsatzstelle} - ${einsatz.datum} ${einsatz.uhrzeit}`;
+
+              item.appendChild(strong);
+              item.appendChild(small);
               item.onclick = () => { loadEinsatzByNumber(einsatz.einsatznummer); };
               recentList.appendChild(item);
             });

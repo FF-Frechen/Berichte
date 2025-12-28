@@ -12,6 +12,17 @@ let currentVersionPdfId = null;
 
 const SERVER_URL = '/api';
 
+// XSS-Schutz: HTML-Escape Funktion
+function escapeHtml(unsafe) {
+    if (unsafe === null || unsafe === undefined) return '';
+    return String(unsafe)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
 // Fahrzeugkonfiguration - wird beim Start vom Backend geladen
 let besatzungen = {};
 let fahrzeugNamen = {};
@@ -522,12 +533,15 @@ async function loadPDFVersions(einsatznummer) {
           }
           const date = new Date(created_at_utc).toLocaleString('de-DE', { timeZone: 'Europe/Berlin' });
 
-          const emailButton = pdf.email_sent === 1 
+          // XSS-Fix: Escape User-Daten
+          const safeCreatedBy = escapeHtml(pdf.created_by);
+
+          const emailButton = pdf.email_sent === 1
             ? '<button disabled style="background-color: #6c757d; cursor: not-allowed;">✅ Versendet</button>'
             : `<button onclick="sendPDFEmail(${pdf.id}, ${pdf.version})" style="background-color: #198754;">📧 E-Mail senden</button>`;
-          
+
           return `<div class="pdf-item">
-            <div><strong>Version ${pdf.version}</strong><br><small>${date}${pdf.created_by ? ` - ${pdf.created_by}` : ''}</small></div>
+            <div><strong>Version ${pdf.version}</strong><br><small>${date}${pdf.created_by ? ` - ${safeCreatedBy}` : ''}</small></div>
             <div class="pdf-actions">
               <a href="${SERVER_URL}/pdf/file/${pdf.id}" target="_blank">Download</a>
               ${emailButton}
@@ -665,11 +679,21 @@ function autocomplete(inp, arr) {
       if (arr[i].toLowerCase().includes(val.toLowerCase())) {
         const item = document.createElement("div");
         const startIndex = arr[i].toLowerCase().indexOf(val.toLowerCase());
-        item.innerHTML = arr[i].substr(0, startIndex);
-        item.innerHTML += "<strong>" + arr[i].substr(startIndex, val.length) + "</strong>";
-        item.innerHTML += arr[i].substr(startIndex + val.length);
-        item.innerHTML += "<input type='hidden' value='" + arr[i] + "'>";
-        
+
+        // XSS-Fix: DOM-Methoden statt innerHTML
+        const textBefore = document.createTextNode(arr[i].substr(0, startIndex));
+        const strong = document.createElement("strong");
+        strong.textContent = arr[i].substr(startIndex, val.length);
+        const textAfter = document.createTextNode(arr[i].substr(startIndex + val.length));
+        const hiddenInput = document.createElement("input");
+        hiddenInput.type = "hidden";
+        hiddenInput.value = arr[i];
+
+        item.appendChild(textBefore);
+        item.appendChild(strong);
+        item.appendChild(textAfter);
+        item.appendChild(hiddenInput);
+
         item.addEventListener("click", function(e) {
           inp.value = this.getElementsByTagName("input")[0].value;
           const event = new Event('change');

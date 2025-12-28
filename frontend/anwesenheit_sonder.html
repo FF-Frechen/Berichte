@@ -598,7 +598,7 @@
 
         matches.forEach(name => {
           const div = document.createElement('div');
-          div.innerHTML = name;
+          div.textContent = name; // XSS-Fix: textContent statt innerHTML
           div.addEventListener('click', function() {
             input.value = name;
             closeAllLists();
