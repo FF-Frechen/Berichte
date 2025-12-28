@@ -22,12 +22,11 @@ load_env_file() {
     fi
 }
 
-# Lade einheitliche .env Datei
+# Lade einheitliche .env Datei (optional für Docker)
 if load_env_file /config/.env; then
-    echo "✓ .env geladen"
+    echo "✓ .env Datei geladen"
 else
-    echo "⚠ WARNUNG: .env nicht gefunden in /config/"
-    echo "  Verwende Umgebungsvariablen aus docker-compose.yml / portainer-stack.yml"
+    echo "✓ Verwende Umgebungsvariablen aus Container (portainer-stack.yml)"
 fi
 
 # Prüfe ob Pflichtfelder gesetzt sind

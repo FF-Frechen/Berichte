@@ -8,14 +8,6 @@ const crypto = require('crypto');
 const PDFDocument = require('pdfkit');
 const SVGtoPDF = require('svg-to-pdfkit');
 const multer = require('multer');
-// Input-Validierung optional (nur wenn Modul vorhanden)
-let validation;
-try {
-    validation = require('./validation');
-} catch (err) {
-    console.log('⚠ validation.js nicht gefunden - Validierung deaktiviert (OK für lokale Nutzung)');
-    validation = null;
-}
 
 const app = express();
 const PORT = 3000;
@@ -301,12 +293,15 @@ const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CR
 
 // === HILFSFUNKTIONEN ===
 
-// Liste der Namen laden (aus Environment)
-const getNamenListe = () => {
+// Liste der Namen einmalig beim Start laden (aus Environment)
+const NAMEN_LISTE = (() => {
     const namen = NAMEN_ENV.split(',').map(n => n.trim()).filter(n => n);
     console.log(`Namen geladen aus Environment (${namen.length} Einträge).`);
     return namen.sort((a, b) => a.localeCompare(b));
-};
+})(); // IIFE - wird sofort beim Start ausgeführt
+
+// Funktion für Kompatibilität (gibt gecachte Liste zurück)
+const getNamenListe = () => NAMEN_LISTE;
 
 // ========================================
 // PDF-GENERATOR-FUNKTION - Kompakt & Optimiert
