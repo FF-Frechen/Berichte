@@ -45,15 +45,13 @@ const SMTP_CONFIG = {
     }
 };
 
-// DEBUG: SMTP-Konfiguration beim Start ausgeben
+// SMTP-Konfiguration beim Start ausgeben
 console.log('=== SMTP-Konfiguration ===');
 console.log('SMTP_HOST:', SMTP_CONFIG.host);
 console.log('SMTP_PORT:', SMTP_CONFIG.port);
 console.log('SMTP_SECURE:', SMTP_CONFIG.secure);
 console.log('SMTP_USER:', SMTP_CONFIG.auth.user);
-console.log('SMTP_USER (Länge):', SMTP_CONFIG.auth.user ? SMTP_CONFIG.auth.user.length : 0);
 console.log('SMTP_PASS vorhanden:', SMTP_CONFIG.auth.pass ? `Ja (${SMTP_CONFIG.auth.pass.length} Zeichen)` : 'NEIN!');
-console.log('SMTP_PASS (erste 3 / letzte 3):', SMTP_CONFIG.auth.pass ? `${SMTP_CONFIG.auth.pass.substring(0, 3)}...${SMTP_CONFIG.auth.pass.substring(SMTP_CONFIG.auth.pass.length - 3)}` : 'KEIN PASSWORT');
 console.log('========================');
 
 // Namen aus Environment (Pflichtfeld)
