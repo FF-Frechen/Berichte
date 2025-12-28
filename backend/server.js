@@ -508,6 +508,13 @@ const generatePDF = (einsatzData, res) => {
     doc.end();
 };
 
+// Helper function: Normalize text for PDF (UTF-8 compatibility)
+function normalizePDFText(text) {
+    if (!text) return '';
+    // Normalize to NFC (canonical composition) for better PDF compatibility
+    return String(text).normalize('NFC');
+}
+
 // Add a simple table method to PDFDocument
 PDFDocument.prototype.table = function (table, options) {
     let self = this;
@@ -1220,9 +1227,9 @@ app.post('/api/anwesenheit/pdf', async (req, res) => {
         // Info section
         doc.fontSize(12).font('Helvetica-Bold');
         doc.text(`Datum: ${datum}`, 50, doc.y);
-        doc.text(`Thema: ${thema || ''}`, 300, doc.y - 15);
+        doc.text(`Thema: ${normalizePDFText(thema)}`, 300, doc.y - 15);
         doc.moveDown(0.5);
-        doc.text(`Dienstleiter: ${dienstleiter || ''}`, 50, doc.y);
+        doc.text(`Dienstleiter: ${normalizePDFText(dienstleiter)}`, 50, doc.y);
         doc.moveDown(1.5);
 
         // Table header
@@ -1271,8 +1278,8 @@ app.post('/api/anwesenheit/pdf', async (req, res) => {
             doc.text(person.nr, xPos + 5, yPos + 8, { width: colWidths.nr, align: 'center' });
             xPos += colWidths.nr;
 
-            // Name
-            doc.text(person.name || '', xPos + 5, yPos + 8, { width: colWidths.name });
+            // Name (mit UTF-8 Normalisierung)
+            doc.text(normalizePDFText(person.name), xPos + 5, yPos + 8, { width: colWidths.name });
             xPos += colWidths.name;
 
             // Checkboxes for status - nur für normale Dienste
@@ -1301,8 +1308,8 @@ app.post('/api/anwesenheit/pdf', async (req, res) => {
                 xPos += colWidths.entschuldigt;
             }
 
-            // Bemerkung
-            doc.text(person.bemerkung || '', xPos + 5, yPos + 8, {
+            // Bemerkung (mit UTF-8 Normalisierung)
+            doc.text(normalizePDFText(person.bemerkung), xPos + 5, yPos + 8, {
                 width: colWidths.bemerkung - 10
             });
 
@@ -1354,7 +1361,10 @@ app.post('/api/anwesenheit/email', async (req, res) => {
 
     try {
         // Generate PDF in memory
-        const doc = new PDFDocument({ size: 'A4', margin: 50 });
+        const doc = new PDFDocument({
+            size: 'A4',
+            margin: 50
+        });
         const chunks = [];
 
         doc.on('data', (chunk) => chunks.push(chunk));
@@ -1402,9 +1412,9 @@ app.post('/api/anwesenheit/email', async (req, res) => {
         // Info section
         doc.fontSize(12).font('Helvetica-Bold');
         doc.text(`Datum: ${datum}`, 50, doc.y);
-        doc.text(`Thema: ${thema || ''}`, 300, doc.y - 15);
+        doc.text(`Thema: ${normalizePDFText(thema)}`, 300, doc.y - 15);
         doc.moveDown(0.5);
-        doc.text(`Dienstleiter: ${dienstleiter || ''}`, 50, doc.y);
+        doc.text(`Dienstleiter: ${normalizePDFText(dienstleiter)}`, 50, doc.y);
         doc.moveDown(1.5);
 
         // Table header - unterschiedlich je nach Type
@@ -1465,8 +1475,8 @@ app.post('/api/anwesenheit/email', async (req, res) => {
             doc.text(person.nr, xPos + 5, yPos + 8, { width: colWidths.nr, align: 'center' });
             xPos += colWidths.nr;
 
-            // Name
-            doc.text(person.name || '', xPos + 5, yPos + 8, { width: colWidths.name });
+            // Name (mit UTF-8 Normalisierung)
+            doc.text(normalizePDFText(person.name), xPos + 5, yPos + 8, { width: colWidths.name });
             xPos += colWidths.name;
 
             // Checkboxes for status - nur für normale Dienste
@@ -1495,8 +1505,8 @@ app.post('/api/anwesenheit/email', async (req, res) => {
                 xPos += colWidths.entschuldigt;
             }
 
-            // Bemerkung
-            doc.text(person.bemerkung || '', xPos + 5, yPos + 8, {
+            // Bemerkung (mit UTF-8 Normalisierung)
+            doc.text(normalizePDFText(person.bemerkung), xPos + 5, yPos + 8, {
                 width: colWidths.bemerkung - 10
             });
 
