@@ -1,206 +1,290 @@
 # Feuerwehr Berichte System
 
-Ein Docker-basiertes System zur Verwaltung von Einsatzberichten und Anwesenheitslisten für die Feuerwehr.
+Ein Docker-basiertes System zur Verwaltung von Einsatzberichten und Anwesenheitslisten für die Feuerwehr Frechen.
+
+⚠️ **WICHTIG: Dies ist eine private Repository!** Nicht öffentlich teilen.
 
 ## 📋 Features
 
-- 📝 Einsatzberichte erstellen und als PDF speichern
-- 👥 Anwesenheitslisten erfassen
-- 📧 Automatischer E-Mail-Versand der Berichte
-- 🗄️ SQLite-Datenbank zur Datenspeicherung
-- 🐳 Vollständig containerisiert mit Docker
+- 📝 **Einsatzberichte** erstellen und als PDF speichern (mit Unterschriften)
+- 👥 **Anwesenheitslisten** erfassen (Dienste und Sonderdienste)
+- 📧 **Automatischer E-Mail-Versand** mit BCC für Datenschutz (DSGVO-konform)
+- 🗄️ **SQLite-Datenbank** zur Datenspeicherung
+- 🚗 **Bis zu 50 Fahrzeuge** konfigurierbar
+- 📱 **Mobile-optimiert** (iPad Touch-Targets)
+- 🔤 **UTF-8 Support** für deutsche Umlaute in PDFs
+- 🐳 **Vollständig containerisiert** mit Docker
+- 🔒 **Lokaler Betrieb** ohne Internet-Zugang
 
-## 🚀 Schnellstart
+## 🚀 Schnellstart mit Portainer (EMPFOHLEN)
 
 ### Voraussetzungen
 
-- Docker & Docker Compose installiert
-- Git installiert
+- Portainer installiert und läuft
+- GitHub Personal Access Token (für private Repo)
 
-### Installation
+### Deployment in Portainer
 
-1. **Repository klonen:**
-   ```bash
-   git clone https://github.com/FF-Frechen/Berichte.git
-   cd Berichte
+#### Schritt 1: GitHub Token erstellen (einmalig)
+
+1. Gehe zu GitHub: https://github.com/settings/tokens
+2. Klicke **"Generate new token"** → **"Classic"**
+3. Name: `Portainer Berichte Deploy`
+4. Scopes auswählen: **✅ repo** (voller Zugriff auf private Repositories)
+5. Token generieren und **SOFORT KOPIEREN** (wird nur einmal angezeigt!)
+
+#### Schritt 2: Stack in Portainer erstellen
+
+1. **In Portainer:** `Stacks` → `+ Add stack`
+
+2. **Name:** `feuerwehr-berichte`
+
+3. **Build method:** `Repository` ⚠️ WICHTIG!
+
+4. **Repository konfigurieren:**
+   ```
+   Repository URL: https://github.com/FF-Frechen/Berichte
+   Repository reference: refs/heads/deploy
+   Compose path: portainer-stack.yml
    ```
 
-2. **Umgebungsvariablen konfigurieren:**
+5. **Authentication aktivieren:**
+   - ✅ GitOps updates
+   - Username: `dein-github-username`
+   - Personal Access Token: `dein-token-von-schritt-1`
 
-   Kopiere die Beispieldatei und fülle sie mit deinen Daten:
+6. **Environment variables:** Scrollen zu "Environment variables" und alle Variablen eintragen:
+
+   **WICHTIG: Werte in Anführungszeichen setzen wenn Sonderzeichen enthalten!**
+
    ```bash
-   cp .env.example .env
+   # Sicherheit
+   DELETE_PASSWORD=dein-sicheres-passwort
+
+   # SMTP-Konfiguration (⚠️ Passwort in Anführungszeichen wenn # oder andere Sonderzeichen!)
+   SMTP_HOST=smtp.ionos.de
+   SMTP_PORT=465
+   SMTP_SECURE=true
+   SMTP_USER=support@feuerwehr-frechen.de
+   SMTP_PASS="dein-passwort-hier"  # ⚠️ Anführungszeichen bei Sonderzeichen!
+
+   # E-Mail-Empfänger (BCC - Datenschutz)
+   EMAIL_RECIPIENTS_BERICHT=email1@example.com,email2@example.com
+   EMAIL_RECIPIENTS_ANWESENHEIT=email1@example.com,email2@example.com
+   EMAIL_RECIPIENTS_SONDER=email1@example.com,email2@example.com
+
+   # Namensliste (Komma-getrennt)
+   NAMEN=Max Mustermann,Erika Musterfrau,Hans Schmidt,Anna Müller,Peter Weber
+
+   # Fahrzeug 1 (Beispiel - siehe example.env für alle 14 Fahrzeuge)
+   VEHICLE_1_ID=hlf20-1
+   VEHICLE_1_NAME=FRE 1 / HLF 20 /1
+   VEHICLE_1_DISPLAY_NAME=FRE1/HLF20/1 - Hilfeleistungslöschfahrzeug
+   VEHICLE_1_FUNCTIONS=Gruppenführer,Maschinist,Angriffstrupp - Führer,Angriffstrupp - Mann,Wassertrupp - Führer,Wassertrupp - Mann,Schlauchtrupp - Führer,Schlauchtrupp - Mann,Melder
+
+   # ... weitere Fahrzeuge bis VEHICLE_14 (siehe example.env)
+   # System unterstützt bis zu VEHICLE_50
    ```
 
-   Bearbeite die `.env` Datei mit deinen Daten:
-   - SMTP-Zugangsdaten für E-Mail-Versand
-   - E-Mail-Empfänger
-   - Passwörter
-   - Liste der Feuerwehrmitglieder (Komma-getrennt)
-   - Fahrzeugkonfiguration mit Funktionen
+7. **Deploy the stack** klicken
 
-3. **Docker Container starten:**
-   ```bash
-   docker-compose up -d
-   ```
+8. **Warten** bis alle Container laufen (grün)
 
-4. **Anwendung öffnen:**
+9. **Öffnen:** `http://deine-server-ip:8080`
 
-   Öffne deinen Browser und navigiere zu: `http://localhost`
+### Updates einspielen
+
+1. In Portainer: `Stacks` → `feuerwehr-berichte`
+2. Klicke **"Pull and redeploy"**
+3. Fertig! ✅
 
 ## 📁 Projektstruktur
 
 ```
 Berichte/
-├── backend/              # Node.js Backend
-│   ├── server.js        # Express Server
-│   ├── package.json     # Dependencies
-│   └── Dockerfile       # Backend Container
-├── frontend/            # HTML Frontend
-│   ├── index.html       # Hauptseite
-│   ├── anwesenheit.html # Anwesenheitsliste
-│   ├── Doku.html        # Dokumentation
-│   └── input_doku.html  # Eingabeformular
-├── nginx/               # NGINX Konfiguration
-│   └── nginx.conf       # Reverse Proxy Config
-├── docker-compose.yml   # Docker Orchestrierung
-└── .env                 # Konfiguration (nicht im Repo!)
+├── backend/                 # Node.js Backend
+│   ├── server.js           # Express Server mit API
+│   ├── entrypoint.sh       # Docker-Startup-Script
+│   ├── package.json        # Dependencies
+│   ├── Dockerfile          # Backend Container
+│   └── public/
+│       └── client.js       # Frontend-JavaScript
+├── frontend/               # HTML Frontend
+│   ├── index.html          # Hauptseite (Menü)
+│   ├── input_doku.html     # Einsatzdaten eingeben
+│   ├── Doku.html           # Einsatz-Dokumentation
+│   ├── anwesenheit.html    # Anwesenheitsliste (Dienste)
+│   └── anwesenheit_sonder.html  # Sonderdienste
+├── nginx/                  # NGINX Reverse Proxy
+│   ├── nginx.conf          # Konfiguration
+│   └── Dockerfile          # Frontend Container
+├── portainer-stack.yml     # Portainer Stack-Definition
+├── docker-compose.yml      # Lokale Entwicklung
+├── example.env             # Beispiel-Konfiguration
+└── README.md               # Diese Datei
 ```
 
 ## ⚙️ Konfiguration
 
-Alle Einstellungen befinden sich in der `.env` Datei:
+### Umgebungsvariablen
 
-```env
-# SMTP-Konfiguration
-SMTP_HOST=smtp.example.com
-SMTP_PORT=587
-SMTP_SECURE=false
-SMTP_USER=deine-email@example.com
-SMTP_PASS=dein-passwort
+Alle Einstellungen werden über Umgebungsvariablen konfiguriert. In Portainer direkt eingeben, lokal in `.env` Datei.
 
+#### Wichtige Variablen
+
+```bash
 # Sicherheit
-DELETE_PASSWORD=pdf-lösch-passwort
+DELETE_PASSWORD=dein-sicheres-passwort
 
-# E-Mail-Empfänger
-EMAIL_RECIPIENTS=empfaenger1@example.com,empfaenger2@example.com
-EMAIL_RECIPIENTS_ANWESENHEIT=empfaenger1@example.com
+# SMTP (E-Mail-Versand)
+SMTP_HOST=smtp.ionos.de
+SMTP_PORT=465
+SMTP_SECURE=true
+SMTP_USER=support@feuerwehr-frechen.de
+SMTP_PASS="passwort123#"  # ⚠️ Anführungszeichen bei # oder Sonderzeichen!
 
-# Namensliste
+# E-Mail-Empfänger (werden als BCC versendet - Datenschutz!)
+EMAIL_RECIPIENTS_BERICHT=email1@example.com,email2@example.com
+EMAIL_RECIPIENTS_ANWESENHEIT=email1@example.com
+EMAIL_RECIPIENTS_SONDER=email1@example.com
+
+# Namensliste für Autocomplete
 NAMEN=Max Mustermann,Erika Musterfrau,Hans Schmidt
-
-# Fahrzeugkonfiguration (Beispiel für ein Fahrzeug)
-VEHICLE_1_ID=hlf20-1
-VEHICLE_1_NAME=FRE 1 / HLF 20 /1
-VEHICLE_1_DISPLAY_NAME=FRE1/HLF20/1 - Hilfeleistungslöschfahrzeug
-VEHICLE_1_FUNCTIONS=Gruppenführer,Maschinist,Angriffstrupp - Führer,...
-# ... weitere Fahrzeuge (siehe .env.example)
 ```
 
 ### Fahrzeugkonfiguration
 
-Die Fahrzeuge und ihre Funktionen werden direkt in der `.env` konfiguriert. Die Reihenfolge der Fahrzeuge in der Datei bestimmt die Reihenfolge auf der Webseite.
+**Unterstützte Anzahl:** 1 bis 50 Fahrzeuge
 
-**Eigenschaften:**
-- `VEHICLE_X_ID` - Eindeutige ID (intern verwendet)
-- `VEHICLE_X_NAME` - Name für PDF-Generierung (kurz)
-- `VEHICLE_X_DISPLAY_NAME` - Vollständiger Name für die Webseite
-- `VEHICLE_X_FUNCTIONS` - Komma-separierte Liste der Funktionen/Positionen
-
-**Anpassung:**
-- Fahrzeuge hinzufügen: Neuen Block mit nächster Nummer anhängen
-- Fahrzeuge entfernen: Entsprechenden Block löschen und Nummern anpassen
-- Reihenfolge ändern: Blöcke verschieben (Nummern beibehalten)
-- Funktionen anpassen: `FUNCTIONS` Zeile bearbeiten
-
-Siehe `.env.example` für die vollständige Konfiguration aller 13 Standard-Fahrzeuge.
-
-## 🔧 Docker Befehle
+Jedes Fahrzeug benötigt 4 Variablen:
 
 ```bash
+VEHICLE_1_ID=hlf20-1                    # Eindeutige ID
+VEHICLE_1_NAME=FRE 1 / HLF 20 /1       # Name für PDF
+VEHICLE_1_DISPLAY_NAME=FRE1/HLF20/1 - Hilfeleistungslöschfahrzeug  # Anzeigename
+VEHICLE_1_FUNCTIONS=Gruppenführer,Maschinist,Angriffstrupp - Führer,...  # Funktionen
+```
+
+**Vollständige Konfiguration:** Siehe `example.env` für alle 14 Standard-Fahrzeuge.
+
+**Reihenfolge:** Die Nummerierung (1, 2, 3...) bestimmt die Anzeigereihenfolge.
+
+## 🔧 Lokale Entwicklung (docker-compose)
+
+```bash
+# Repository klonen
+git clone https://github.com/FF-Frechen/Berichte.git
+cd Berichte
+
+# .env Datei erstellen
+cp example.env .env
+# .env bearbeiten mit deinen Daten
+
 # Container starten
 docker-compose up -d
-
-# Container stoppen
-docker-compose down
 
 # Logs anzeigen
 docker-compose logs -f
 
-# Container neu bauen
-docker-compose up -d --build
+# Container stoppen
+docker-compose down
 
-# Status prüfen
-docker-compose ps
+# Neu bauen
+docker-compose up -d --build
 ```
 
-## 📦 Portainer Deployment
-
-Das Projekt kann direkt aus GitHub in Portainer deployed werden! 🚀
-
-**Für detaillierte Anweisungen siehe:** [PORTAINER.md](./PORTAINER.md)
-
-### 🔥 Empfohlene Methode: Git Auto-Build
-
-Portainer pullt die Dateien direkt von GitHub und baut die Images automatisch.
-
-1. **In Portainer:** Stacks → Add stack → **Repository**
-
-2. **Repository konfigurieren:**
-   ```
-   Repository URL: https://github.com/FF-Frechen/Berichte
-   Branch: refs/heads/main
-   Compose path: portainer-stack.yml
-   Authentication: GitHub Token (siehe GITHUB-TOKEN-GUIDE.md)
-   ```
-
-3. **Environment-Variablen setzen** (siehe `.env.example`)
-
-4. **Deploy the stack** - fertig! ✅
-
-**Vorteile:**
-- ✅ Keine manuellen Builds nötig
-- ✅ Updates mit einem Klick (**Pull and redeploy**)
-- ✅ Vollautomatischer Build aus GitHub
-
-Die Konfiguration ist **universell verwendbar** und nicht an einen bestimmten Serverpfad gebunden!
-
-## 🔒 Sicherheitshinweise
-
-- **Niemals** `.env` in Git committen!
-- `.gitignore` schützt diese Datei automatisch
-- Verwende starke Passwörter für `DELETE_PASSWORD`
-- Ändere regelmäßig die SMTP-Zugangsdaten
+Anwendung öffnen: `http://localhost`
 
 ## 🐛 Troubleshooting
 
 ### Container startet nicht
-```bash
-# Logs prüfen
-docker-compose logs backend
-docker-compose logs nginx
 
-# Container neu starten
-docker-compose restart
+```bash
+# Logs prüfen in Portainer:
+# Stacks → feuerwehr-berichte → Container auswählen → Logs
+
+# Oder in SSH/Shell:
+docker logs feuerwehr-backend
+docker logs feuerwehr-frontend
 ```
 
+**Häufige Fehler:**
+- `DELETE_PASSWORD nicht gesetzt` → Environment Variable vergessen
+- `NAMEN nicht gesetzt` → NAMEN Variable fehlt
+- `Keine Fahrzeuge konfiguriert` → Mindestens VEHICLE_1_* muss gesetzt sein
+
 ### E-Mail-Versand funktioniert nicht
-- Prüfe SMTP-Zugangsdaten in `.env`
-- Prüfe Firewall-Einstellungen (Port 587)
-- Kontrolliere Backend-Logs: `docker-compose logs backend`
 
-### Datenbank-Fehler
-- Stelle sicher, dass das `data/` Verzeichnis existiert
-- Prüfe Schreibrechte: `chmod -R 755 data/`
+1. **SMTP-Zugangsdaten prüfen:**
+   - Backend-Logs zeigen SMTP-Konfiguration beim Start
+   - `[EMAIL]` Logs zeigen Details beim Versand
 
-## 📄 Lizenz
+2. **Passwort mit Sonderzeichen (# ! etc.):**
+   ```bash
+   # FALSCH:
+   SMTP_PASS=passwort#123
 
-Dieses Projekt ist für den internen Gebrauch der Feuerwehr Frechen bestimmt.
+   # RICHTIG:
+   SMTP_PASS="passwort#123"
+   ```
 
-## 👥 Support
+3. **Firewall/Ports prüfen:**
+   - Port 465 (SMTP SSL) muss erreichbar sein
+   - Port 587 (SMTP TLS) als Alternative
 
-Bei Fragen oder Problemen wende dich an das Entwicklerteam.
+### "Namen geladen" erscheint mehrfach
+
+✅ Behoben in aktueller Version (wird nur einmal beim Start geladen)
+
+### PDF-Buttons haben unterschiedliche Größen
+
+✅ Behoben in aktueller Version (alle Buttons sind jetzt identisch)
+
+### Empfänger sehen sich gegenseitig in E-Mails
+
+✅ Behoben in aktueller Version (BCC statt TO - DSGVO-konform)
+
+### Umlaute (ä, ö, ü) in PDFs falsch
+
+✅ Behoben in aktueller Version (UTF-8 Normalisierung)
+
+## 🔒 Sicherheit & Datenschutz
+
+- ✅ **BCC E-Mail-Versand:** Empfänger sehen sich nicht (DSGVO)
+- ✅ **Lokaler Betrieb:** Keine Internet-Verbindung nötig
+- ✅ **Private Repository:** Nicht öffentlich zugänglich
+- ✅ **Passwortschutz:** PDF-Löschung nur mit Passwort
+- ⚠️ **HTTPS:** Bei Internet-Betrieb HTTPS einrichten!
+- ⚠️ **Starke Passwörter:** Für DELETE_PASSWORD und SMTP
+
+**Niemals committen:**
+- `.env` Dateien
+- SMTP-Zugangsdaten
+- Passwörter
+- Produktionsdaten
+
+## 📊 Aktuelle Version
+
+**Branch:** `deploy` (für Produktion)
+**Letzte Updates:**
+- ✅ BCC E-Mail-Versand (Issue #25)
+- ✅ UTF-8 Support für PDFs (Umlaute)
+- ✅ Bereinigte Backend-Logs
+- ✅ Radio-Button-Größen für Mobile (Issue #22)
+- ✅ Einheitliche PDF-Button-Größen (Issue #20)
+- ✅ Bis zu 50 Fahrzeuge unterstützt
+
+## 📞 Support
+
+Bei Fragen oder Problemen:
+1. Prüfe die Logs in Portainer
+2. Siehe Troubleshooting-Sektion oben
+3. Kontaktiere das Entwicklerteam
 
 ---
 
-**Hinweis:** Dieses System ist für den Einsatz im lokalen Netzwerk konzipiert. Für den Produktivbetrieb im Internet sollten zusätzliche Sicherheitsmaßnahmen implementiert werden (HTTPS, Authentication, etc.).
+## 📄 Lizenz
+
+**Private Repository - Nur für interne Nutzung der Feuerwehr Frechen.**
+
+Dieses System ist für den Einsatz im lokalen Netzwerk konzipiert. Für Internet-Betrieb zusätzliche Sicherheitsmaßnahmen implementieren (HTTPS, Authentication, Firewall, etc.).

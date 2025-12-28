@@ -518,15 +518,19 @@
           </div>
         </td>
         <td class="bemerkung-column">
-          <input type="text" data-row="${nr}" maxlength="80" placeholder="max. 80 Zeichen">
+          <input type="text" class="bemerkung-input" data-row="${nr}" maxlength="80" placeholder="max. 80 Zeichen">
         </td>
       `;
 
       tbody.appendChild(row);
 
       // Setup autocomplete for this row
-      const input = row.querySelector('.name-input');
-      setupAutocomplete(input);
+      const nameInput = row.querySelector('.name-input');
+      setupAutocomplete(nameInput);
+
+      // Setup delete-on-empty for bemerkung field
+      const bemerkungInput = row.querySelector('.bemerkung-input');
+      setupDeleteOnEmpty(bemerkungInput, row);
 
       // Add change listeners for auto-save
       row.querySelectorAll('input').forEach(input => {
@@ -552,15 +556,19 @@
           </div>
         </td>
         <td class="bemerkung-column">
-          <input type="text" data-row="${nr}" value="${person.bemerkung || ''}" maxlength="80" placeholder="max. 80 Zeichen">
+          <input type="text" class="bemerkung-input" data-row="${nr}" value="${person.bemerkung || ''}" maxlength="80" placeholder="max. 80 Zeichen">
         </td>
       `;
 
       tbody.appendChild(row);
 
       // Setup autocomplete for this row
-      const input = row.querySelector('.name-input');
-      setupAutocomplete(input);
+      const nameInput = row.querySelector('.name-input');
+      setupAutocomplete(nameInput);
+
+      // Setup delete-on-empty for bemerkung field
+      const bemerkungInput = row.querySelector('.bemerkung-input');
+      setupDeleteOnEmpty(bemerkungInput, row);
 
       // Add change listeners for auto-save
       row.querySelectorAll('input').forEach(input => {
@@ -569,6 +577,41 @@
       });
 
       renumberRows();
+    }
+
+    // Setup delete-on-empty for input fields (name or bemerkung)
+    function setupDeleteOnEmpty(input, row) {
+      let hadContent = false;
+
+      // Track if user has entered content
+      input.addEventListener('input', function() {
+        if (this.value.trim().length > 0) {
+          hadContent = true;
+        }
+      });
+
+      // Delete empty rows when field is cleared
+      input.addEventListener('blur', function() {
+        setTimeout(() => {
+          const tbody = document.getElementById('attendance-tbody');
+          const rows = tbody.querySelectorAll('tr');
+          const currentRowIndex = Array.from(rows).indexOf(row);
+
+          const name = row.querySelector('.name-input')?.value.trim() || '';
+          const bemerkung = row.querySelector('.bemerkung-input')?.value.trim() || '';
+
+          // Only delete if:
+          // - Not the first row
+          // - User had previously entered content (hadContent = true)
+          // - Name AND Bemerkung are empty (ignore radio button status)
+          // - Row still exists in DOM
+          if (currentRowIndex > 0 && hadContent && !name && !bemerkung && row.parentNode) {
+            row.remove();
+            renumberRows();
+            triggerAutoSave();
+          }
+        }, 200);
+      });
     }
 
     // Setup autocomplete for a specific input field
@@ -622,28 +665,8 @@
         });
       });
 
-      // Delete empty rows when name is cleared (except first row)
-      input.addEventListener('blur', function() {
-        setTimeout(() => {
-          const tbody = document.getElementById('attendance-tbody');
-          const rows = tbody.querySelectorAll('tr');
-          const currentRowIndex = Array.from(rows).indexOf(row);
-
-          const name = input.value.trim();
-          const bemerkung = row.querySelector('.bemerkung-column input').value.trim();
-
-          // Only delete if:
-          // - Not the first row
-          // - User had previously entered content (hadContent = true)
-          // - Now the row is completely empty
-          // - Row still exists in DOM
-          if (currentRowIndex > 0 && hadContent && !name && !bemerkung && row.parentNode) {
-            row.remove();
-            renumberRows();
-            triggerAutoSave();
-          }
-        }, 200);
-      });
+      // Setup delete-on-empty for name field
+      setupDeleteOnEmpty(input, row);
 
       input.addEventListener('keydown', function(e) {
         const items = autocompleteDiv.getElementsByTagName('div');
