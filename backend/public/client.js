@@ -320,8 +320,9 @@ function createFahrzeugSection(fahrzeugTyp) {
 
 function getSelectedFahrzeuge() {
   const selected = [];
-  ['hlf20-1', 'hlf20-2', 'lf20-1', 'ptlf4000-1', 'elw-1', 'mtf-1', 'mtf-2', 'kdow-1', 'lkw-1', 'dlk23-1', 'wlf26-1', 'gw-1', 'kks-1'].forEach(id => {
-    if (document.getElementById(`fahrzeug-${id}`).checked) selected.push(id);
+  vehicleOrder.forEach(id => {
+    const checkbox = document.getElementById(`fahrzeug-${id}`);
+    if (checkbox && checkbox.checked) selected.push(id);
   });
   return selected;
 }
