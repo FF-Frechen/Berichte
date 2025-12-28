@@ -87,8 +87,9 @@
       Namenliste Stand wird geladen...
     </div>
   </div>
+
   <script>
-    // Dynamisches Laden des Namenslisten-Stands
+    // Lade Namenslisten-Stand vom Backend
     fetch('/api/namen')
       .then(response => response.json())
       .then(data => {
