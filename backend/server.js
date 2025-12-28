@@ -40,8 +40,8 @@ const SMTP_CONFIG = {
     port: parseInt(process.env.SMTP_PORT),
     secure: process.env.SMTP_SECURE === 'true',
     auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS
+        user: process.env.SMTP_USER ? process.env.SMTP_USER.trim() : '',
+        pass: process.env.SMTP_PASS ? process.env.SMTP_PASS.trim() : ''
     }
 };
 
@@ -51,7 +51,9 @@ console.log('SMTP_HOST:', SMTP_CONFIG.host);
 console.log('SMTP_PORT:', SMTP_CONFIG.port);
 console.log('SMTP_SECURE:', SMTP_CONFIG.secure);
 console.log('SMTP_USER:', SMTP_CONFIG.auth.user);
+console.log('SMTP_USER (Länge):', SMTP_CONFIG.auth.user ? SMTP_CONFIG.auth.user.length : 0);
 console.log('SMTP_PASS vorhanden:', SMTP_CONFIG.auth.pass ? `Ja (${SMTP_CONFIG.auth.pass.length} Zeichen)` : 'NEIN!');
+console.log('SMTP_PASS (erste 3 / letzte 3):', SMTP_CONFIG.auth.pass ? `${SMTP_CONFIG.auth.pass.substring(0, 3)}...${SMTP_CONFIG.auth.pass.substring(SMTP_CONFIG.auth.pass.length - 3)}` : 'KEIN PASSWORT');
 console.log('========================');
 
 // Namen aus Environment (Pflichtfeld)
