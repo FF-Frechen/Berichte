@@ -42,6 +42,7 @@ services:
       - EMAIL_RECIPIENTS_SONDER=${EMAIL_RECIPIENTS_SONDER}
       # Namensliste (in Portainer als Stack-Variable setzen!)
       - NAMEN=${NAMEN}
+      - NAMENSLISTE_STAND=${NAMENSLISTE_STAND:-}
       # Fahrzeugkonfiguration (siehe .env.portainer.example für alle Variablen)
       # Beispiel: VEHICLE_1_ID, VEHICLE_1_NAME, VEHICLE_1_DISPLAY_NAME, VEHICLE_1_FUNCTIONS
       # Diese Variablen werden automatisch erkannt, wenn sie in Portainer gesetzt sind

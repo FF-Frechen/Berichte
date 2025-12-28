@@ -53,6 +53,9 @@ if (!NAMEN_ENV) {
     process.exit(1);
 }
 
+// Namenslisten-Stand (optional, mit Default)
+const NAMENSLISTE_STAND = process.env.NAMENSLISTE_STAND || new Date().toLocaleDateString('de-DE');
+
 // === FAHRZEUG-KONFIGURATION AUS .ENV ===
 // Liest alle VEHICLE_X_* Variablen und erstellt daraus die benötigten Mappings
 function loadVehiclesFromEnv() {
@@ -1035,7 +1038,10 @@ app.get('/api/namen', (req, res) => {
         return res.status(404).json({ error: 'Keine Namen gefunden. Überprüfen Sie NAMEN_ENV oder namen.txt.' });
     }
 
-    res.json({ namen: namen });
+    res.json({
+        namen: namen,
+        stand: NAMENSLISTE_STAND
+    });
 });
 
 // Fahrzeug-Konfiguration API
