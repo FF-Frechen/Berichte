@@ -8,6 +8,7 @@ const crypto = require('crypto');
 const PDFDocument = require('pdfkit');
 const SVGtoPDF = require('svg-to-pdfkit');
 const multer = require('multer');
+const validation = require('./validation');
 
 const app = express();
 const PORT = 3000;
@@ -601,7 +602,28 @@ app.get('/api/einsatz/:einsatznummer', (req, res) => {
 // Einsatzdaten speichern/updaten (POST)
 app.post('/api/einsatz', (req, res) => {
     const { einsatznummer, fahrzeuge, besatzungen, ...einsatzData } = req.body;
-    
+
+    // Input-Validierung
+    const einsatznummerCheck = validation.validateEinsatznummer(einsatznummer);
+    if (!einsatznummerCheck.valid) {
+        return res.status(400).json({ error: einsatznummerCheck.error });
+    }
+
+    const datumCheck = validation.validateDatum(einsatzData.datum);
+    if (!datumCheck.valid) {
+        return res.status(400).json({ error: datumCheck.error });
+    }
+
+    const uhrzeitCheck = validation.validateUhrzeit(einsatzData.uhrzeit);
+    if (!uhrzeitCheck.valid) {
+        return res.status(400).json({ error: uhrzeitCheck.error });
+    }
+
+    const einsatzstelleCheck = validation.validateText(einsatzData.einsatzstelle, 'Einsatzstelle', 200);
+    if (!einsatzstelleCheck.valid) {
+        return res.status(400).json({ error: einsatzstelleCheck.error });
+    }
+
     const dbData = {
         einsatznummer: einsatznummer,
         einsatzstelle: einsatzData.einsatzstelle,
