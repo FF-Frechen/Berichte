@@ -8,14 +8,6 @@ const crypto = require('crypto');
 const PDFDocument = require('pdfkit');
 const SVGtoPDF = require('svg-to-pdfkit');
 const multer = require('multer');
-// Input-Validierung optional (nur wenn Modul vorhanden)
-let validation;
-try {
-    validation = require('./validation');
-} catch (err) {
-    console.log('⚠ validation.js nicht gefunden - Validierung deaktiviert (OK für lokale Nutzung)');
-    validation = null;
-}
 
 const app = express();
 const PORT = 3000;
@@ -301,12 +293,15 @@ const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CR
 
 // === HILFSFUNKTIONEN ===
 
-// Liste der Namen laden (aus Environment)
-const getNamenListe = () => {
+// Liste der Namen einmalig beim Start laden (aus Environment)
+const NAMEN_LISTE = (() => {
     const namen = NAMEN_ENV.split(',').map(n => n.trim()).filter(n => n);
     console.log(`Namen geladen aus Environment (${namen.length} Einträge).`);
     return namen.sort((a, b) => a.localeCompare(b));
-};
+})(); // IIFE - wird sofort beim Start ausgeführt
+
+// Funktion für Kompatibilität (gibt gecachte Liste zurück)
+const getNamenListe = () => NAMEN_LISTE;
 
 // ========================================
 // PDF-GENERATOR-FUNKTION - Kompakt & Optimiert
@@ -1001,7 +996,7 @@ app.post('/api/pdf/email', async (req, res) => {
             
             const mailOptions = {
                 from: SMTP_CONFIG.auth.user,
-                to: recipients.join(','),
+                bcc: recipients.join(','), // BCC statt TO für Datenschutz - Empfänger sehen sich nicht
                 subject: subject,
                 text: message,
                 attachments: [
@@ -1011,10 +1006,10 @@ app.post('/api/pdf/email', async (req, res) => {
                     }
                 ]
             };
-            
+
             console.log('[EMAIL] Mail-Optionen:', JSON.stringify({
                 from: mailOptions.from,
-                to: mailOptions.to,
+                bcc: mailOptions.bcc,
                 subject: mailOptions.subject,
                 attachmentCount: mailOptions.attachments.length
             }, null, 2));
@@ -1378,7 +1373,7 @@ app.post('/api/anwesenheit/email', async (req, res) => {
 
                 const mailOptions = {
                     from: SMTP_CONFIG.auth.user,
-                    to: recipients,
+                    bcc: recipients, // BCC statt TO für Datenschutz - Empfänger sehen sich nicht
                     subject: emailSubject,
                     text: `Anbei finden Sie ${isSonder ? 'den Sonderdienst' : 'die Anwesenheitsliste'} vom ${datum}.\n\nThema: ${thema || 'Nicht angegeben'}\nDienstleiter: ${dienstleiter || 'Nicht angegeben'}\nTeilnehmer: ${teilnehmer.length}`,
                     attachments: [{
@@ -1387,7 +1382,7 @@ app.post('/api/anwesenheit/email', async (req, res) => {
                     }]
                 };
 
-                console.log('[ANWESENHEIT EMAIL] Sende E-Mail an:', recipients);
+                console.log('[ANWESENHEIT EMAIL] Sende E-Mail (BCC) an:', recipients);
 
                 await mailTransporter.sendMail(mailOptions);
 
