@@ -537,16 +537,21 @@ async function loadPDFVersions(einsatznummer) {
           // XSS-Fix: Escape User-Daten
           const safeCreatedBy = escapeHtml(pdf.created_by);
 
+          // Alle drei Buttons als echte <button> Elemente für einheitliche Größe
+          const downloadButton = `<button onclick="window.open('${SERVER_URL}/pdf/file/${pdf.id}', '_blank')" style="background-color: #003049;">📥 Download</button>`;
+
           const emailButton = pdf.email_sent === 1
             ? '<button disabled style="background-color: #6c757d; cursor: not-allowed;">✅ Versendet</button>'
             : `<button onclick="sendPDFEmail(${pdf.id}, ${pdf.version})" style="background-color: #198754;">📧 E-Mail senden</button>`;
 
+          const deleteButton = `<button onclick="deletePDF(${pdf.id}, ${pdf.version})" style="background-color: #d62828;">🗑️ Löschen</button>`;
+
           return `<div class="pdf-item">
             <div><strong>Version ${pdf.version}</strong><br><small>${date}${pdf.created_by ? ` - ${safeCreatedBy}` : ''}</small></div>
             <div class="pdf-actions">
-              <a href="${SERVER_URL}/pdf/file/${pdf.id}" target="_blank">Download</a>
+              ${downloadButton}
               ${emailButton}
-              <button onclick="deletePDF(${pdf.id}, ${pdf.version})" style="background-color: #d62828;">🗑️ Löschen</button>
+              ${deleteButton}
             </div>
           </div>`;
         }).join('');
