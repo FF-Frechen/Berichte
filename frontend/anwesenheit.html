@@ -627,15 +627,14 @@
           const currentRowIndex = Array.from(rows).indexOf(row);
 
           const name = row.querySelector('.name-input')?.value.trim() || '';
-          const status = row.querySelector('input[type="radio"]:checked');
           const bemerkung = row.querySelector('.bemerkung-input')?.value.trim() || '';
 
           // Only delete if:
           // - Not the first row
           // - User had previously entered content (hadContent = true)
-          // - Now the row is completely empty
+          // - Name AND Bemerkung are empty (ignore radio button status)
           // - Row still exists in DOM
-          if (currentRowIndex > 0 && hadContent && !name && !status && !bemerkung && row.parentNode) {
+          if (currentRowIndex > 0 && hadContent && !name && !bemerkung && row.parentNode) {
             row.remove();
             renumberRows();
             triggerAutoSave();

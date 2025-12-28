@@ -603,7 +603,7 @@
           // Only delete if:
           // - Not the first row
           // - User had previously entered content (hadContent = true)
-          // - Now the row is completely empty
+          // - Name AND Bemerkung are empty (ignore radio button status)
           // - Row still exists in DOM
           if (currentRowIndex > 0 && hadContent && !name && !bemerkung && row.parentNode) {
             row.remove();
