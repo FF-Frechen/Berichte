@@ -534,15 +534,20 @@
           </div>
         </td>
         <td class="bemerkung-column">
-          <input type="text" data-row="${nr}" maxlength="35" placeholder="max. 35 Zeichen">
+          <input type="text" class="bemerkung-input" data-row="${nr}" maxlength="35" placeholder="max. 35 Zeichen">
         </td>
       `;
 
       tbody.appendChild(row);
 
-      // Setup autocomplete for this row
-      const input = row.querySelector('.name-input');
-      setupAutocomplete(input);
+      // Setup autocomplete for name field
+      const nameInput = row.querySelector('.name-input');
+      setupAutocomplete(nameInput);
+
+      // Setup blur handlers for both name and bemerkung
+      const bemerkungInput = row.querySelector('.bemerkung-input');
+      nameInput.addEventListener('blur', () => checkAndDeleteEmptyRow(row));
+      bemerkungInput.addEventListener('blur', () => checkAndDeleteEmptyRow(row));
 
       // Add change listeners for auto-save
       row.querySelectorAll('input').forEach(input => {
@@ -581,15 +586,20 @@
           </div>
         </td>
         <td class="bemerkung-column">
-          <input type="text" data-row="${nr}" value="${person.bemerkung || ''}" maxlength="35" placeholder="max. 35 Zeichen">
+          <input type="text" class="bemerkung-input" data-row="${nr}" value="${person.bemerkung || ''}" maxlength="35" placeholder="max. 35 Zeichen">
         </td>
       `;
 
       tbody.appendChild(row);
 
-      // Setup autocomplete for this row
-      const input = row.querySelector('.name-input');
-      setupAutocomplete(input);
+      // Setup autocomplete for name field
+      const nameInput = row.querySelector('.name-input');
+      setupAutocomplete(nameInput);
+
+      // Setup blur handlers for both name and bemerkung
+      const bemerkungInput = row.querySelector('.bemerkung-input');
+      nameInput.addEventListener('blur', () => checkAndDeleteEmptyRow(row));
+      bemerkungInput.addEventListener('blur', () => checkAndDeleteEmptyRow(row));
 
       // Add change listeners for auto-save
       row.querySelectorAll('input').forEach(input => {
@@ -600,21 +610,44 @@
       renumberRows();
     }
 
+    // NEUE EINFACHE LOGIK: Prüfe und lösche leere Zeilen
+    function checkAndDeleteEmptyRow(row) {
+      setTimeout(() => {
+        // Hole aktuelle Daten
+        const tbody = document.getElementById('attendance-tbody');
+        const rows = tbody.querySelectorAll('tr');
+        const rowIndex = Array.from(rows).indexOf(row);
+
+        // Nur löschen wenn:
+        // 1. Zeile existiert noch im DOM
+        // 2. Nicht die erste Zeile (Index 0 behalten)
+        // 3. Mehr als eine Zeile vorhanden (mindestens eine Zeile behalten)
+        // 4. Name UND Bemerkung sind leer
+        if (!row.parentNode || rowIndex === 0 || rows.length <= 1) {
+          return; // Nicht löschen
+        }
+
+        const name = row.querySelector('.name-input')?.value.trim() || '';
+        const bemerkung = row.querySelector('.bemerkung-input')?.value.trim() || '';
+
+        // Lösche wenn komplett leer
+        if (!name && !bemerkung) {
+          row.remove();
+          renumberRows();
+          triggerAutoSave();
+        }
+      }, 200); // Kurze Verzögerung für Tab-Navigation
+    }
+
     // Setup autocomplete for a specific input field
     function setupAutocomplete(input) {
       const row = input.closest('tr');
       const autocompleteDiv = row.querySelector('.autocomplete-items');
       let currentFocus = -1;
-      let hadContent = false;
 
       // Handle input: autocomplete dropdown AND add new row when needed
       input.addEventListener('input', function() {
         const val = this.value;
-
-        // Track if user has ever entered content
-        if (val.trim().length > 0) {
-          hadContent = true;
-        }
 
         // Add new row when typing in the name field of the last row
         const tbody = document.getElementById('attendance-tbody');
@@ -649,30 +682,6 @@
           });
           autocompleteDiv.appendChild(div);
         });
-      });
-
-      // Delete empty rows when name is cleared (except first row)
-      input.addEventListener('blur', function() {
-        setTimeout(() => {
-          const tbody = document.getElementById('attendance-tbody');
-          const rows = tbody.querySelectorAll('tr');
-          const currentRowIndex = Array.from(rows).indexOf(row);
-
-          const name = input.value.trim();
-          const status = row.querySelector('input[type="radio"]:checked');
-          const bemerkung = row.querySelector('.bemerkung-column input').value.trim();
-
-          // Only delete if:
-          // - Not the first row
-          // - User had previously entered content (hadContent = true)
-          // - Now the row is completely empty
-          // - Row still exists in DOM
-          if (currentRowIndex > 0 && hadContent && !name && !status && !bemerkung && row.parentNode) {
-            row.remove();
-            renumberRows();
-            triggerAutoSave();
-          }
-        }, 200);
       });
 
       input.addEventListener('keydown', function(e) {
