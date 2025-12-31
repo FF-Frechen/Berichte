@@ -621,17 +621,20 @@
         // Nur löschen wenn:
         // 1. Zeile existiert noch im DOM
         // 2. Nicht die erste Zeile (Index 0 behalten)
-        // 3. Mehr als eine Zeile vorhanden (mindestens eine Zeile behalten)
-        // 4. Name UND Bemerkung sind leer
-        if (!row.parentNode || rowIndex === 0 || rows.length <= 1) {
+        // 3. Nicht die letzte Zeile (neue leere Zeile für Eingabe)
+        // 4. Mehr als eine Zeile vorhanden (mindestens eine Zeile behalten)
+        // 5. Name UND Bemerkung sind leer
+        // 6. Kein Radio-Button ist ausgewählt
+        if (!row.parentNode || rowIndex === 0 || rowIndex === rows.length - 1 || rows.length <= 1) {
           return; // Nicht löschen
         }
 
         const name = row.querySelector('.name-input')?.value.trim() || '';
         const bemerkung = row.querySelector('.bemerkung-input')?.value.trim() || '';
+        const hasRadioSelected = row.querySelector('input[type="radio"]:checked') !== null;
 
-        // Lösche wenn komplett leer
-        if (!name && !bemerkung) {
+        // Lösche wenn komplett leer UND kein Status ausgewählt
+        if (!name && !bemerkung && !hasRadioSelected) {
           row.remove();
           renumberRows();
           triggerAutoSave();
