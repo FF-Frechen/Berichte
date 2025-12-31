@@ -232,48 +232,6 @@ docker logs feuerwehr-frontend
    - Port 465 (SMTP SSL) muss erreichbar sein
    - Port 587 (SMTP TLS) als Alternative
 
-### "Namen geladen" erscheint mehrfach
-
-✅ Behoben in aktueller Version (wird nur einmal beim Start geladen)
-
-### PDF-Buttons haben unterschiedliche Größen
-
-✅ Behoben in aktueller Version (alle Buttons sind jetzt identisch)
-
-### Empfänger sehen sich gegenseitig in E-Mails
-
-✅ Behoben in aktueller Version (BCC statt TO - DSGVO-konform)
-
-### Umlaute (ä, ö, ü) in PDFs falsch
-
-✅ Behoben in aktueller Version (UTF-8 Normalisierung)
-
-## 🔒 Sicherheit & Datenschutz
-
-- ✅ **BCC E-Mail-Versand:** Empfänger sehen sich nicht (DSGVO)
-- ✅ **Lokaler Betrieb:** Keine Internet-Verbindung nötig
-- ✅ **Private Repository:** Nicht öffentlich zugänglich
-- ✅ **Passwortschutz:** PDF-Löschung nur mit Passwort
-- ⚠️ **HTTPS:** Bei Internet-Betrieb HTTPS einrichten!
-- ⚠️ **Starke Passwörter:** Für DELETE_PASSWORD und SMTP
-
-**Niemals committen:**
-- `.env` Dateien
-- SMTP-Zugangsdaten
-- Passwörter
-- Produktionsdaten
-
-## 📊 Aktuelle Version
-
-**Branch:** `deploy` (für Produktion)
-**Letzte Updates:**
-- ✅ BCC E-Mail-Versand (Issue #25)
-- ✅ UTF-8 Support für PDFs (Umlaute)
-- ✅ Bereinigte Backend-Logs
-- ✅ Radio-Button-Größen für Mobile (Issue #22)
-- ✅ Einheitliche PDF-Button-Größen (Issue #20)
-- ✅ Bis zu 50 Fahrzeuge unterstützt
-
 ## 📞 Support
 
 Bei Fragen oder Problemen:
