@@ -18,6 +18,7 @@ class SignaturePad {
     this.isDrawing = false;
     this.isEmpty = true;
     this.points = [];
+    this.strokes = []; // Speichert alle Strokes für toData/fromData
 
     this._setupCanvas();
     this._attachEventListeners();
@@ -122,6 +123,10 @@ class SignaturePad {
   }
 
   _endStroke() {
+    // Speichere den aktuellen Stroke
+    if (this.points.length > 0) {
+      this.strokes.push([...this.points]);
+    }
     this.points = [];
   }
 
@@ -130,6 +135,7 @@ class SignaturePad {
     this.ctx.fillStyle = this.options.backgroundColor;
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
     this.isEmpty = true;
+    this.strokes = [];
   }
 
   toDataURL(type = 'image/png') {
@@ -138,6 +144,42 @@ class SignaturePad {
 
   isEmpty() {
     return this.isEmpty;
+  }
+
+  toData() {
+    // Gibt alle Strokes zurück (kompatibel mit signature_pad Library)
+    return this.strokes.map(stroke => ({
+      points: stroke,
+      penColor: this.options.penColor,
+      minWidth: this.options.minWidth,
+      maxWidth: this.options.maxWidth
+    }));
+  }
+
+  fromData(data) {
+    // Zeichnet gespeicherte Strokes (kompatibel mit signature_pad Library)
+    if (!data || data.length === 0) return;
+
+    this.clear();
+    this.isEmpty = false;
+
+    data.forEach(strokeData => {
+      const points = strokeData.points || strokeData;
+
+      if (points.length === 0) return;
+
+      this.ctx.beginPath();
+      this.ctx.moveTo(points[0].x, points[0].y);
+
+      for (let i = 1; i < points.length; i++) {
+        this.ctx.lineTo(points[i].x, points[i].y);
+      }
+
+      this.ctx.stroke();
+
+      // Speichere Stroke auch in this.strokes
+      this.strokes.push([...points]);
+    });
   }
 }
 
