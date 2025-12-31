@@ -619,16 +619,10 @@
       const row = input.closest('tr');
       const autocompleteDiv = row.querySelector('.autocomplete-items');
       let currentFocus = -1;
-      let hadContent = false;
 
       // Handle input: autocomplete dropdown AND add new row when needed
       input.addEventListener('input', function() {
         const val = this.value;
-
-        // Track if user has ever entered content
-        if (val.trim().length > 0) {
-          hadContent = true;
-        }
 
         // Add new row when typing in the name field of the last row
         const tbody = document.getElementById('attendance-tbody');
