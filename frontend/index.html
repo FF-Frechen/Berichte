@@ -71,6 +71,7 @@
       font-size: 14px;
       color: #333;
       border-left: 4px solid #003049;
+      border-right: 4px solid #003049;
     }
   </style>
 </head>
@@ -82,9 +83,27 @@
       <a href="anwesenheit.html" class="menu-button">Anwesenheitsliste Dienste</a>
       <a href="anwesenheit_sonder.html" class="menu-button">Anwesenheitsliste Sonderdienst</a>
     </div>
-    <div class="info-text">
-      Namenliste Stand 04.09.2025
+    <div class="info-text" id="namensliste-stand">
+      Namenliste Stand wird geladen...
     </div>
   </div>
+
+  <script>
+    // Lade Namenslisten-Stand vom Backend
+    fetch('/api/namen')
+      .then(response => response.json())
+      .then(data => {
+        const standElement = document.getElementById('namensliste-stand');
+        if (data.stand) {
+          standElement.textContent = `Namenliste Stand ${data.stand}`;
+        } else {
+          standElement.textContent = 'Namenliste Stand unbekannt';
+        }
+      })
+      .catch(error => {
+        console.error('Fehler beim Laden des Namenslisten-Stands:', error);
+        document.getElementById('namensliste-stand').textContent = 'Namenliste Stand unbekannt';
+      });
+  </script>
 </body>
 </html>

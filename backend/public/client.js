@@ -9,8 +9,21 @@ let currentPosition;
 let currentRow;
 let currentVersionToSend = null;
 let currentVersionPdfId = null;
+let autoSaveTimeout = null;
+let isSaving = false;
 
 const SERVER_URL = '/api';
+
+// XSS-Schutz: HTML-Escape Funktion
+function escapeHtml(unsafe) {
+    if (unsafe === null || unsafe === undefined) return '';
+    return String(unsafe)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
 
 // Fahrzeugkonfiguration - wird beim Start vom Backend geladen
 let besatzungen = {};
@@ -139,36 +152,47 @@ function initializeNewEinsatz(einsatznummer, params) {
 }
 
 function applyEinsatzData(data) {
-  const einsatz = data.einsatz;
-  const fahrzeuge = data.fahrzeuge || [];
-  const besatzungenData = data.besatzungen || [];
-  
-  currentEinsatzId = einsatz.einsatznummer;
-  
-  document.getElementById('info-einsatznummer').textContent = einsatz.einsatznummer;
-  document.getElementById('info-datum').textContent = einsatz.datum;
-  document.getElementById('info-uhrzeit').textContent = einsatz.uhrzeit;
-  document.getElementById('info-einsatzstelle').textContent = einsatz.einsatzstelle;
-  document.getElementById('info-einsatzleiter').textContent = einsatz.einsatzleiter || '-';
-  
-  fahrzeuge.forEach(f => {
-    const checkbox = document.getElementById(`fahrzeug-${f.fahrzeug}`);
-    if (checkbox) checkbox.checked = true;
-    const bereitCheckbox = document.getElementById(`bereit-${f.fahrzeug}`);
-    if (bereitCheckbox) bereitCheckbox.checked = f.bereitstellung;
-  });
-  
-  besatzungenData.forEach(b => {
-    const member = besatzungen[b.fahrzeug]?.find(m => m.position === b.position);
-    if (member) {
-      member.name = b.name || "";
-      member.signature = b.signature || null;
-      member.pa = b.pa || false;
-      member.paMinuten = b.paMinuten || "";
-    }
-  });
-  
-  updateFahrzeugTables();
+  try {
+    const einsatz = data.einsatz;
+    const fahrzeuge = data.fahrzeuge || [];
+    const besatzungenData = data.besatzungen || [];
+
+    currentEinsatzId = einsatz.einsatznummer;
+
+    document.getElementById('info-einsatznummer').textContent = einsatz.einsatznummer;
+    document.getElementById('info-datum').textContent = einsatz.datum;
+    document.getElementById('info-uhrzeit').textContent = einsatz.uhrzeit;
+    document.getElementById('info-einsatzstelle').textContent = einsatz.einsatzstelle;
+    document.getElementById('info-einsatzleiter').textContent = einsatz.einsatzleiter || '-';
+
+    fahrzeuge.forEach(f => {
+      const checkbox = document.getElementById(`fahrzeug-${f.fahrzeug}`);
+      if (checkbox) checkbox.checked = true;
+      const bereitCheckbox = document.getElementById(`bereit-${f.fahrzeug}`);
+      if (bereitCheckbox) bereitCheckbox.checked = f.bereitstellung;
+    });
+
+    besatzungenData.forEach(b => {
+      // Prüfe ob das Fahrzeug in der aktuellen Konfiguration existiert
+      if (!besatzungen[b.fahrzeug]) {
+        console.warn(`Fahrzeug ${b.fahrzeug} nicht in aktueller Konfiguration gefunden - überspringe`);
+        return;
+      }
+
+      const member = besatzungen[b.fahrzeug].find(m => m.position === b.position);
+      if (member) {
+        member.name = b.name || "";
+        member.signature = b.signature || null;
+        member.pa = b.pa || false;
+        member.paMinuten = b.paMinuten || "";
+      }
+    });
+
+    updateFahrzeugTables();
+  } catch (error) {
+    console.error('Fehler in applyEinsatzData:', error);
+    throw error; // Re-throw damit es vom Aufrufer behandelt wird
+  }
 }
 
 function updateFahrzeugTables() {
@@ -225,6 +249,7 @@ function createFahrzeugSection(fahrzeugTyp) {
     nameInput.addEventListener("change", (e) => {
       besatzungen[fahrzeugTyp][index].name = e.target.value;
       saveDataLocal();
+      triggerAutoSave();
     });
     nameCell.appendChild(nameInput);
     row.appendChild(nameCell);
@@ -264,6 +289,7 @@ function createFahrzeugSection(fahrzeugTyp) {
         paInput.required = false;
       }
       saveDataLocal();
+      triggerAutoSave();
     });
     const paInput = document.createElement("input");
     paInput.type = "number";
@@ -276,6 +302,7 @@ function createFahrzeugSection(fahrzeugTyp) {
     paInput.addEventListener("change", (e) => {
       besatzungen[fahrzeugTyp][index].paMinuten = e.target.value;
       saveDataLocal();
+      triggerAutoSave();
     });
     paInput.addEventListener("blur", (e) => {
       const checkbox = paCell.querySelector('input[type="checkbox"]');
@@ -298,8 +325,9 @@ function createFahrzeugSection(fahrzeugTyp) {
 
 function getSelectedFahrzeuge() {
   const selected = [];
-  ['hlf20-1', 'hlf20-2', 'lf20-1', 'ptlf4000-1', 'elw-1', 'mtf-1', 'mtf-2', 'kdow-1', 'lkw-1', 'dlk23-1', 'wlf26-1', 'gw-1', 'kks-1'].forEach(id => {
-    if (document.getElementById(`fahrzeug-${id}`).checked) selected.push(id);
+  vehicleOrder.forEach(id => {
+    const checkbox = document.getElementById(`fahrzeug-${id}`);
+    if (checkbox && checkbox.checked) selected.push(id);
   });
   return selected;
 }
@@ -425,6 +453,62 @@ async function saveData() {
   }
 }
 
+// Auto-save function (silent, no notifications)
+async function autoSave() {
+  if (isSaving) return;
+
+  isSaving = true;
+  saveDataLocal();
+
+  const besatzungenArray = [];
+  getSelectedFahrzeuge().forEach(fahrzeugTyp => {
+    besatzungen[fahrzeugTyp].forEach(member => {
+      besatzungenArray.push({
+        fahrzeug: fahrzeugTyp,
+        position: member.position,
+        name: member.name || "",
+        signature: member.signature || "",
+        pa: member.pa || false,
+        paMinuten: member.paMinuten || ""
+      });
+    });
+  });
+
+  const einsatzData = {
+    einsatznummer: currentEinsatzId,
+    datum: document.getElementById('info-datum').textContent,
+    uhrzeit: document.getElementById('info-uhrzeit').textContent,
+    einsatzstelle: document.getElementById('info-einsatzstelle').textContent,
+    einsatzleiter: document.getElementById('info-einsatzleiter').textContent,
+    fahrzeuge: getSelectedFahrzeuge().map(f => ({
+      fahrzeug: f,
+      name: f,
+      bereitstellung: document.getElementById(`bereit-${f}`)?.checked || false
+    })),
+    besatzungen: besatzungenArray
+  };
+
+  try {
+    await fetch(`${SERVER_URL}/einsatz`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(einsatzData)
+    });
+  } catch (error) {
+    console.log('Auto-save: Netzwerkfehler, lokal gespeichert');
+  } finally {
+    isSaving = false;
+  }
+}
+
+// Trigger auto-save with debounce
+function triggerAutoSave() {
+  if (autoSaveTimeout) {
+    clearTimeout(autoSaveTimeout);
+  }
+  autoSaveTimeout = setTimeout(autoSave, 1000); // Save after 1 second of inactivity
+}
+
 // OPTIMIERT: PDF-Generierung nur noch über Backend-API
 async function generatePDF() {
   // Erst Daten speichern
@@ -511,16 +595,24 @@ async function loadPDFVersions(einsatznummer) {
           }
           const date = new Date(created_at_utc).toLocaleString('de-DE', { timeZone: 'Europe/Berlin' });
 
-          const emailButton = pdf.email_sent === 1 
+          // XSS-Fix: Escape User-Daten
+          const safeCreatedBy = escapeHtml(pdf.created_by);
+
+          // Alle drei Buttons als echte <button> Elemente für einheitliche Größe
+          const downloadButton = `<button onclick="window.open('${SERVER_URL}/pdf/file/${pdf.id}', '_blank')" style="background-color: #003049;">📥 Download</button>`;
+
+          const emailButton = pdf.email_sent === 1
             ? '<button disabled style="background-color: #6c757d; cursor: not-allowed;">✅ Versendet</button>'
             : `<button onclick="sendPDFEmail(${pdf.id}, ${pdf.version})" style="background-color: #198754;">📧 E-Mail senden</button>`;
-          
+
+          const deleteButton = `<button onclick="deletePDF(${pdf.id}, ${pdf.version})" style="background-color: #d62828;">🗑️ Löschen</button>`;
+
           return `<div class="pdf-item">
-            <div><strong>Version ${pdf.version}</strong><br><small>${date}${pdf.created_by ? ` - ${pdf.created_by}` : ''}</small></div>
+            <div><strong>Version ${pdf.version}</strong><br><small>${date}${pdf.created_by ? ` - ${safeCreatedBy}` : ''}</small></div>
             <div class="pdf-actions">
-              <a href="${SERVER_URL}/pdf/file/${pdf.id}" target="_blank">Download</a>
+              ${downloadButton}
               ${emailButton}
-              <button onclick="deletePDF(${pdf.id}, ${pdf.version})" style="background-color: #d62828;">🗑️ Löschen</button>
+              ${deleteButton}
             </div>
           </div>`;
         }).join('');
@@ -654,11 +746,21 @@ function autocomplete(inp, arr) {
       if (arr[i].toLowerCase().includes(val.toLowerCase())) {
         const item = document.createElement("div");
         const startIndex = arr[i].toLowerCase().indexOf(val.toLowerCase());
-        item.innerHTML = arr[i].substr(0, startIndex);
-        item.innerHTML += "<strong>" + arr[i].substr(startIndex, val.length) + "</strong>";
-        item.innerHTML += arr[i].substr(startIndex + val.length);
-        item.innerHTML += "<input type='hidden' value='" + arr[i] + "'>";
-        
+
+        // XSS-Fix: DOM-Methoden statt innerHTML
+        const textBefore = document.createTextNode(arr[i].substr(0, startIndex));
+        const strong = document.createElement("strong");
+        strong.textContent = arr[i].substr(startIndex, val.length);
+        const textAfter = document.createTextNode(arr[i].substr(startIndex + val.length));
+        const hiddenInput = document.createElement("input");
+        hiddenInput.type = "hidden";
+        hiddenInput.value = arr[i];
+
+        item.appendChild(textBefore);
+        item.appendChild(strong);
+        item.appendChild(textAfter);
+        item.appendChild(hiddenInput);
+
         item.addEventListener("click", function(e) {
           inp.value = this.getElementsByTagName("input")[0].value;
           const event = new Event('change');
@@ -715,10 +817,12 @@ function closeAllLists(elmnt) {
 
 // Signature Modal Funktionen
 function openSignatureModal(fahrzeugTyp, index, position, row) {
+  closeAllLists(); // Schließe Autocomplete-Dropdown bevor Modal öffnet
+
   currentFahrzeug = fahrzeugTyp;
   currentPosition = index;
   currentRow = row;
-  
+
   document.getElementById("current-position").textContent = position;
   document.getElementById("signature-modal").style.display = "block";
   
@@ -759,8 +863,9 @@ function saveSignature() {
   
   const signButton = currentRow.querySelector("button");
   signButton.textContent = "Neu unterschreiben";
-  
+
   saveDataLocal();
+  triggerAutoSave();
   closeSignatureModal();
 }
 
@@ -827,6 +932,12 @@ function updateFahrzeugCheckboxes() {
   const checkboxes = container.querySelectorAll('input[type="checkbox"][id^="fahrzeug-"]');
   checkboxes.forEach(checkbox => {
     checkbox.addEventListener("change", updateFahrzeugTables);
+  });
+
+  // Event-Listener für Bereitstellungs-Checkboxen (Auto-Save)
+  const bereitCheckboxes = container.querySelectorAll('input[type="checkbox"][id^="bereit-"]');
+  bereitCheckboxes.forEach(checkbox => {
+    checkbox.addEventListener("change", triggerAutoSave);
   });
 
   console.log('✓ Fahrzeug-Checkboxen dynamisch generiert');

@@ -199,6 +199,9 @@
     .status-options input[type="radio"] {
       cursor: pointer;
       flex-shrink: 0;
+      width: 20px;
+      height: 20px;
+      margin: 4px;
     }
 
     @media (min-width: 768px) {
@@ -298,6 +301,18 @@
         display: none;
       }
     }
+
+    /* iPad Touch-Optimierungen */
+    input[type="checkbox"] { width: 24px; height: 24px; cursor: pointer; margin: 4px; }
+    button { min-height: 44px; padding: 12px 20px; touch-action: manipulation; }
+    input[type="text"], input[type="date"], input[type="time"], input[type="number"], textarea {
+      padding: 12px;
+      font-size: 16px !important; /* Verhindert Auto-Zoom auf iOS */
+      min-height: 44px;
+    }
+    button:active { transform: scale(0.98); }
+    input:focus, select:focus, textarea:focus { outline: 3px solid #003049; outline-offset: 2px; }
+    .add-row-btn { min-height: 44px; padding: 10px 20px; }
   </style>
 </head>
 <body>
@@ -330,7 +345,6 @@
         <tr>
           <th class="nr-column">Nr.</th>
           <th class="name-column">Name</th>
-          <th class="status-column">Anwesenheit</th>
           <th class="bemerkung-column">Bemerkung / Info</th>
         </tr>
       </thead>
@@ -403,21 +417,20 @@
         datum: document.getElementById('datum').value,
         thema: document.getElementById('thema').value,
         dienstleiter: document.getElementById('dienstleiter').value,
-        teilnehmer: []
+        teilnehmer: [],
+        type: 'sonder'
       };
 
       const rows = document.querySelectorAll('#attendance-tbody tr');
       rows.forEach((row, index) => {
         const nr = index + 1;
         const name = row.querySelector('.name-input')?.value || '';
-        const status = row.querySelector('input[type="radio"]:checked')?.value || '';
         const bemerkung = row.querySelector('.bemerkung-column input')?.value || '';
 
-        if (name || status || bemerkung) {
+        if (name || bemerkung) {
           data.teilnehmer.push({
             nr: nr,
             name: name,
-            status: status,
             bemerkung: bemerkung
           });
         }
@@ -429,7 +442,7 @@
     // Load draft on page load
     async function loadDraft() {
       try {
-        const response = await fetch(`${SERVER_URL}/anwesenheit/draft`);
+        const response = await fetch(`${SERVER_URL}/anwesenheit/draft?type=sonder`);
         if (response.ok) {
           const data = await response.json();
 
@@ -449,6 +462,8 @@
               data.draft.teilnehmer.forEach(person => {
                 addRowWithData(person);
               });
+              // Add empty row after loaded data for new entries
+              addRow();
             } else {
               // Add empty row if no data
               addRow();
@@ -502,29 +517,20 @@
             <div class="autocomplete-items" id="autocomplete-${nr}"></div>
           </div>
         </td>
-        <td class="status-column">
-          <div class="status-options">
-            <label>
-              <input type="radio" name="status-${nr}" value="anwesend"> anwesend
-            </label>
-            <label>
-              <input type="radio" name="status-${nr}" value="nicht_anwesend"> nicht anwesend
-            </label>
-            <label>
-              <input type="radio" name="status-${nr}" value="entschuldigt"> entschuldigt
-            </label>
-          </div>
-        </td>
         <td class="bemerkung-column">
-          <input type="text" data-row="${nr}">
+          <input type="text" class="bemerkung-input" data-row="${nr}" maxlength="80" placeholder="max. 80 Zeichen">
         </td>
       `;
 
       tbody.appendChild(row);
 
       // Setup autocomplete for this row
-      const input = row.querySelector('.name-input');
-      setupAutocomplete(input);
+      const nameInput = row.querySelector('.name-input');
+      setupAutocomplete(nameInput);
+
+      // Setup delete-on-empty for bemerkung field
+      const bemerkungInput = row.querySelector('.bemerkung-input');
+      setupDeleteOnEmpty(bemerkungInput, row);
 
       // Add change listeners for auto-save
       row.querySelectorAll('input').forEach(input => {
@@ -549,29 +555,20 @@
             <div class="autocomplete-items" id="autocomplete-${nr}"></div>
           </div>
         </td>
-        <td class="status-column">
-          <div class="status-options">
-            <label>
-              <input type="radio" name="status-${nr}" value="anwesend" ${person.status === 'anwesend' ? 'checked' : ''}> anwesend
-            </label>
-            <label>
-              <input type="radio" name="status-${nr}" value="nicht_anwesend" ${person.status === 'nicht_anwesend' ? 'checked' : ''}> nicht anwesend
-            </label>
-            <label>
-              <input type="radio" name="status-${nr}" value="entschuldigt" ${person.status === 'entschuldigt' ? 'checked' : ''}> entschuldigt
-            </label>
-          </div>
-        </td>
         <td class="bemerkung-column">
-          <input type="text" data-row="${nr}" value="${person.bemerkung || ''}">
+          <input type="text" class="bemerkung-input" data-row="${nr}" value="${person.bemerkung || ''}" maxlength="80" placeholder="max. 80 Zeichen">
         </td>
       `;
 
       tbody.appendChild(row);
 
       // Setup autocomplete for this row
-      const input = row.querySelector('.name-input');
-      setupAutocomplete(input);
+      const nameInput = row.querySelector('.name-input');
+      setupAutocomplete(nameInput);
+
+      // Setup delete-on-empty for bemerkung field
+      const bemerkungInput = row.querySelector('.bemerkung-input');
+      setupDeleteOnEmpty(bemerkungInput, row);
 
       // Add change listeners for auto-save
       row.querySelectorAll('input').forEach(input => {
@@ -582,21 +579,50 @@
       renumberRows();
     }
 
+    // Setup delete-on-empty for input fields (name or bemerkung)
+    function setupDeleteOnEmpty(input, row) {
+      let hadContent = false;
+
+      // Track if user has entered content
+      input.addEventListener('input', function() {
+        if (this.value.trim().length > 0) {
+          hadContent = true;
+        }
+      });
+
+      // Delete empty rows when field is cleared
+      input.addEventListener('blur', function() {
+        setTimeout(() => {
+          const tbody = document.getElementById('attendance-tbody');
+          const rows = tbody.querySelectorAll('tr');
+          const currentRowIndex = Array.from(rows).indexOf(row);
+
+          const name = row.querySelector('.name-input')?.value.trim() || '';
+          const bemerkung = row.querySelector('.bemerkung-input')?.value.trim() || '';
+
+          // Only delete if:
+          // - Not the first row
+          // - User had previously entered content (hadContent = true)
+          // - Name AND Bemerkung are empty (ignore radio button status)
+          // - Row still exists in DOM
+          if (currentRowIndex > 0 && hadContent && !name && !bemerkung && row.parentNode) {
+            row.remove();
+            renumberRows();
+            triggerAutoSave();
+          }
+        }, 200);
+      });
+    }
+
     // Setup autocomplete for a specific input field
     function setupAutocomplete(input) {
       const row = input.closest('tr');
       const autocompleteDiv = row.querySelector('.autocomplete-items');
       let currentFocus = -1;
-      let hadContent = false;
 
       // Handle input: autocomplete dropdown AND add new row when needed
       input.addEventListener('input', function() {
         const val = this.value;
-
-        // Track if user has ever entered content
-        if (val.trim().length > 0) {
-          hadContent = true;
-        }
 
         // Add new row when typing in the name field of the last row
         const tbody = document.getElementById('attendance-tbody');
@@ -624,7 +650,7 @@
 
         matches.forEach(name => {
           const div = document.createElement('div');
-          div.innerHTML = name;
+          div.textContent = name; // XSS-Fix: textContent statt innerHTML
           div.addEventListener('click', function() {
             input.value = name;
             closeAllLists();
@@ -633,29 +659,8 @@
         });
       });
 
-      // Delete empty rows when name is cleared (except first row)
-      input.addEventListener('blur', function() {
-        setTimeout(() => {
-          const tbody = document.getElementById('attendance-tbody');
-          const rows = tbody.querySelectorAll('tr');
-          const currentRowIndex = Array.from(rows).indexOf(row);
-
-          const name = input.value.trim();
-          const status = row.querySelector('input[type="radio"]:checked');
-          const bemerkung = row.querySelector('.bemerkung-column input').value.trim();
-
-          // Only delete if:
-          // - Not the first row
-          // - User had previously entered content (hadContent = true)
-          // - Now the row is completely empty
-          // - Row still exists in DOM
-          if (currentRowIndex > 0 && hadContent && !name && !status && !bemerkung && row.parentNode) {
-            row.remove();
-            renumberRows();
-            triggerAutoSave();
-          }
-        }, 200);
-      });
+      // Setup delete-on-empty for name field
+      setupDeleteOnEmpty(input, row);
 
       input.addEventListener('keydown', function(e) {
         const items = autocompleteDiv.getElementsByTagName('div');
@@ -713,14 +718,12 @@
       rows.forEach((row, index) => {
         const nr = index + 1;
         const name = document.getElementById(`name-${nr}`)?.value || '';
-        const status = document.querySelector(`input[name="status-${nr}"]:checked`)?.value || '';
         const bemerkung = document.getElementById(`bemerkung-${nr}`)?.value || '';
 
-        if (name || status || bemerkung) {
+        if (name || bemerkung) {
           data.teilnehmer.push({
             nr: nr,
             name: name,
-            status: status,
             bemerkung: bemerkung
           });
         }
@@ -765,14 +768,12 @@
       rows.forEach((row, index) => {
         const nr = index + 1;
         const name = row.querySelector('.name-input')?.value || '';
-        const status = row.querySelector('input[type="radio"]:checked')?.value || '';
         const bemerkung = row.querySelector('.bemerkung-column input')?.value || '';
 
-        if (name || status || bemerkung) {
+        if (name || bemerkung) {
           data.teilnehmer.push({
             nr: nr,
             name: name,
-            status: status,
             bemerkung: bemerkung
           });
         }
@@ -812,17 +813,11 @@
 
       rows.forEach((row, index) => {
         const name = row.querySelector('.name-input')?.value.trim() || '';
-        const status = row.querySelector('input[type="radio"]:checked')?.value || '';
         const bemerkung = row.querySelector('.bemerkung-column input')?.value.trim() || '';
 
         // Check if there's any data in the form
-        if (name || status || bemerkung) {
+        if (name || bemerkung) {
           hasAnyData = true;
-        }
-
-        // If there's a name, status must be selected
-        if (name && !status) {
-          errors.push(`Zeile ${index + 1}: Bitte wählen Sie einen Anwesenheitsstatus für "${name}"`);
         }
       });
 
@@ -848,21 +843,20 @@
         datum: document.getElementById('datum').value,
         thema: document.getElementById('thema').value,
         dienstleiter: document.getElementById('dienstleiter').value,
-        teilnehmer: []
+        teilnehmer: [],
+        type: 'sonder'
       };
 
       const rows = document.querySelectorAll('#attendance-tbody tr');
       rows.forEach((row, index) => {
         const nr = index + 1;
         const name = row.querySelector('.name-input')?.value || '';
-        const status = row.querySelector('input[type="radio"]:checked')?.value || '';
         const bemerkung = row.querySelector('.bemerkung-column input')?.value || '';
 
-        if (name || status || bemerkung) {
+        if (name || bemerkung) {
           data.teilnehmer.push({
             nr: nr,
             name: name,
-            status: status,
             bemerkung: bemerkung
           });
         }
@@ -892,7 +886,7 @@
       if (confirm('Sind Sie sicher, dass Sie alle Daten zurücksetzen möchten?')) {
         // Delete draft from server
         try {
-          await fetch(`${SERVER_URL}/anwesenheit/draft`, { method: 'DELETE' });
+          await fetch(`${SERVER_URL}/anwesenheit/draft?type=sonder`, { method: 'DELETE' });
         } catch (error) {
           console.error('Fehler beim Löschen des Entwurfs:', error);
         }

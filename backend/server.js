@@ -32,12 +32,12 @@ const SMTP_CONFIG = {
     port: parseInt(process.env.SMTP_PORT),
     secure: process.env.SMTP_SECURE === 'true',
     auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS
+        user: process.env.SMTP_USER ? process.env.SMTP_USER.trim() : '',
+        pass: process.env.SMTP_PASS ? process.env.SMTP_PASS.trim() : ''
     }
 };
 
-// DEBUG: SMTP-Konfiguration beim Start ausgeben
+// SMTP-Konfiguration beim Start ausgeben
 console.log('=== SMTP-Konfiguration ===');
 console.log('SMTP_HOST:', SMTP_CONFIG.host);
 console.log('SMTP_PORT:', SMTP_CONFIG.port);
@@ -52,6 +52,9 @@ if (!NAMEN_ENV) {
     console.error('FATAL ERROR: NAMEN nicht in Umgebungsvariablen gesetzt!');
     process.exit(1);
 }
+
+// Namenslisten-Stand (optional, mit Default)
+const NAMENSLISTE_STAND = process.env.NAMENSLISTE_STAND || new Date().toLocaleDateString('de-DE');
 
 // === FAHRZEUG-KONFIGURATION AUS .ENV ===
 // Liest alle VEHICLE_X_* Variablen und erstellt daraus die benötigten Mappings
@@ -153,9 +156,9 @@ const funktionsMapping = {
 };
 
 // E-Mail-Empfänger aus Environment (Pflichtfeld für E-Mail-Versand)
-const EMAIL_RECIPIENTS = process.env.EMAIL_RECIPIENTS;
-if (!EMAIL_RECIPIENTS) {
-    console.warn('WARN: EMAIL_RECIPIENTS nicht gesetzt. E-Mail-Versand wird deaktiviert.');
+const EMAIL_RECIPIENTS_BERICHT = process.env.EMAIL_RECIPIENTS_BERICHT;
+if (!EMAIL_RECIPIENTS_BERICHT) {
+    console.warn('WARN: EMAIL_RECIPIENTS_BERICHT nicht gesetzt. E-Mail-Versand für Einsatzberichte wird deaktiviert.');
 }
 
 let mailTransporter = null;
@@ -290,12 +293,15 @@ const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CR
 
 // === HILFSFUNKTIONEN ===
 
-// Liste der Namen laden (aus Environment)
-const getNamenListe = () => {
+// Liste der Namen einmalig beim Start laden (aus Environment)
+const NAMEN_LISTE = (() => {
     const namen = NAMEN_ENV.split(',').map(n => n.trim()).filter(n => n);
     console.log(`Namen geladen aus Environment (${namen.length} Einträge).`);
     return namen.sort((a, b) => a.localeCompare(b));
-};
+})(); // IIFE - wird sofort beim Start ausgeführt
+
+// Funktion für Kompatibilität (gibt gecachte Liste zurück)
+const getNamenListe = () => NAMEN_LISTE;
 
 // ========================================
 // PDF-GENERATOR-FUNKTION - Kompakt & Optimiert
@@ -327,21 +333,21 @@ const generatePDFContent = (doc, einsatzData) => {
     let yPos = margin + 42;
     doc.fontSize(8).font('Helvetica-Bold');
     doc.text('Einsatznummer:', margin, yPos);
-    doc.font('Helvetica').text(einsatzData.einsatznummer || '', margin + 80, yPos);
-    
+    doc.font('Helvetica').text(normalizePDFText(einsatzData.einsatznummer), margin + 80, yPos);
+
     yPos += 12;
     doc.font('Helvetica-Bold').text('Datum:', margin, yPos);
     doc.font('Helvetica').text(einsatzData.datum || '', margin + 80, yPos);
     doc.font('Helvetica-Bold').text('Uhrzeit:', margin + 220, yPos);
     doc.font('Helvetica').text(einsatzData.uhrzeit || '', margin + 260, yPos);
-    
+
     yPos += 12;
     doc.font('Helvetica-Bold').text('Einsatzstelle:', margin, yPos);
-    doc.font('Helvetica').text(einsatzData.einsatzstelle || '', margin + 80, yPos, { width: 600 });
-    
+    doc.font('Helvetica').text(normalizePDFText(einsatzData.einsatzstelle), margin + 80, yPos, { width: 600 });
+
     yPos += 12;
     doc.font('Helvetica-Bold').text('Einsatzleiter:', margin, yPos);
-    doc.font('Helvetica').text(einsatzData.einsatzleiter || '-', margin + 80, yPos);
+    doc.font('Helvetica').text(normalizePDFText(einsatzData.einsatzleiter) || '-', margin + 80, yPos);
     
     yPos += 20;
 
@@ -440,9 +446,9 @@ const generatePDFContent = (doc, einsatzData) => {
             doc.fontSize(7).font('Helvetica-Bold').fillColor('#000');
             doc.text(funktion, xPos + 2, rowY + 3, { width: colWidths[0] - 4 });
             
-            // Name (KOPIERBAR!)
+            // Name (KOPIERBAR! - mit UTF-8 Normalisierung)
             doc.font('Helvetica').fillColor('#000');
-            doc.text(b.name, xPos + colWidths[0] + 2, rowY + 3, { width: colWidths[1] - 4 });
+            doc.text(normalizePDFText(b.name), xPos + colWidths[0] + 2, rowY + 3, { width: colWidths[1] - 4 });
             
             // Unterschrift anzeigen (falls vorhanden)
             if (b.signature && b.signature.trim() !== '') {
@@ -496,6 +502,13 @@ const generatePDF = (einsatzData, res) => {
     generatePDFContent(doc, einsatzData);
     doc.end();
 };
+
+// Helper function: Normalize text for PDF (UTF-8 compatibility)
+function normalizePDFText(text) {
+    if (!text) return '';
+    // Normalize to NFC (canonical composition) for better PDF compatibility
+    return String(text).normalize('NFC');
+}
 
 // Add a simple table method to PDFDocument
 PDFDocument.prototype.table = function (table, options) {
@@ -598,7 +611,7 @@ app.get('/api/einsatz/:einsatznummer', (req, res) => {
 // Einsatzdaten speichern/updaten (POST)
 app.post('/api/einsatz', (req, res) => {
     const { einsatznummer, fahrzeuge, besatzungen, ...einsatzData } = req.body;
-    
+
     const dbData = {
         einsatznummer: einsatznummer,
         einsatzstelle: einsatzData.einsatzstelle,
@@ -903,15 +916,15 @@ app.post('/api/pdf/email', async (req, res) => {
         return res.status(500).json({ error: 'E-Mail-Dienst nicht konfiguriert. Prüfen Sie die SMTP-Einstellungen.' });
     }
     
-    if (!EMAIL_RECIPIENTS) {
+    if (!EMAIL_RECIPIENTS_BERICHT) {
         console.error('[EMAIL] FEHLER: Keine Empfänger konfiguriert');
-        return res.status(500).json({ error: 'Keine E-Mail-Empfänger konfiguriert. Bitte EMAIL_RECIPIENTS in .env.smtp setzen.' });
+        return res.status(500).json({ error: 'Keine E-Mail-Empfänger konfiguriert. Bitte EMAIL_RECIPIENTS_BERICHT in .env setzen.' });
     }
-    
+
     // Prüfe auf Platzhalter-Adressen
-    if (EMAIL_RECIPIENTS.includes('example.com')) {
-        console.error('[EMAIL] FEHLER: EMAIL_RECIPIENTS enthält Platzhalter-Adressen!');
-        console.error('[EMAIL] Aktuelle Empfänger:', EMAIL_RECIPIENTS);
+    if (EMAIL_RECIPIENTS_BERICHT.includes('example.com')) {
+        console.error('[EMAIL] FEHLER: EMAIL_RECIPIENTS_BERICHT enthält Platzhalter-Adressen!');
+        console.error('[EMAIL] Aktuelle Empfänger:', EMAIL_RECIPIENTS_BERICHT);
         return res.status(500).json({ error: 'E-Mail-Empfänger sind nicht korrekt konfiguriert. Bitte echte E-Mail-Adressen in .env.smtp eintragen.' });
     }
 
@@ -943,7 +956,7 @@ app.post('/api/pdf/email', async (req, res) => {
         
         // Hole Einsatznummer für E-Mail-Text
         const einsatznummer = pdf.einsatznummer;
-        const recipients = EMAIL_RECIPIENTS.split(',').map(e => e.trim());
+        const recipients = EMAIL_RECIPIENTS_BERICHT.split(',').map(e => e.trim());
         
         console.log('[EMAIL] Empfänger:', recipients);
         
@@ -960,7 +973,7 @@ app.post('/api/pdf/email', async (req, res) => {
             
             const mailOptions = {
                 from: SMTP_CONFIG.auth.user,
-                to: recipients.join(','),
+                bcc: recipients.join(','), // BCC statt TO für Datenschutz - Empfänger sehen sich nicht
                 subject: subject,
                 text: message,
                 attachments: [
@@ -970,10 +983,10 @@ app.post('/api/pdf/email', async (req, res) => {
                     }
                 ]
             };
-            
+
             console.log('[EMAIL] Mail-Optionen:', JSON.stringify({
                 from: mailOptions.from,
-                to: mailOptions.to,
+                bcc: mailOptions.bcc,
                 subject: mailOptions.subject,
                 attachmentCount: mailOptions.attachments.length
             }, null, 2));
@@ -1035,7 +1048,10 @@ app.get('/api/namen', (req, res) => {
         return res.status(404).json({ error: 'Keine Namen gefunden. Überprüfen Sie NAMEN_ENV oder namen.txt.' });
     }
 
-    res.json({ namen: namen });
+    res.json({
+        namen: namen,
+        stand: NAMENSLISTE_STAND
+    });
 });
 
 // Fahrzeug-Konfiguration API
@@ -1087,16 +1103,20 @@ app.post('/api/anwesenheit', (req, res) => {
     );
 });
 
-// Auto-save draft (upsert with fixed ID 'draft')
+// Auto-save draft (upsert with fixed ID 'draft' or 'draft-sonder')
 app.post('/api/anwesenheit/draft', (req, res) => {
-    const { datum, thema, dienstleiter, teilnehmer } = req.body;
+    const { datum, thema, dienstleiter, teilnehmer, type } = req.body;
+
+    // Determine draft ID based on type
+    const draftId = type === 'sonder' ? 'draft-sonder' : 'draft-dienste';
 
     const stmt = db.prepare(`
         INSERT OR REPLACE INTO anwesenheitslisten (id, datum, thema, dienstleiter, teilnehmer, erstellt_am)
-        VALUES ('draft', ?, ?, ?, ?, datetime('now'))
+        VALUES (?, ?, ?, ?, ?, datetime('now'))
     `);
 
     stmt.run(
+        draftId,
         datum || '',
         thema || '',
         dienstleiter || '',
@@ -1113,7 +1133,10 @@ app.post('/api/anwesenheit/draft', (req, res) => {
 
 // Get draft
 app.get('/api/anwesenheit/draft', (req, res) => {
-    db.get('SELECT * FROM anwesenheitslisten WHERE id = ?', ['draft'], (err, row) => {
+    const type = req.query.type;
+    const draftId = type === 'sonder' ? 'draft-sonder' : 'draft-dienste';
+
+    db.get('SELECT * FROM anwesenheitslisten WHERE id = ?', [draftId], (err, row) => {
         if (err) {
             console.error('Fehler beim Laden des Entwurfs:', err);
             return res.status(500).json({ error: 'Fehler beim Laden des Entwurfs.' });
@@ -1136,7 +1159,10 @@ app.get('/api/anwesenheit/draft', (req, res) => {
 
 // Delete draft
 app.delete('/api/anwesenheit/draft', (req, res) => {
-    db.run('DELETE FROM anwesenheitslisten WHERE id = ?', ['draft'], function(err) {
+    const type = req.query.type;
+    const draftId = type === 'sonder' ? 'draft-sonder' : 'draft-dienste';
+
+    db.run('DELETE FROM anwesenheitslisten WHERE id = ?', [draftId], function(err) {
         if (err) {
             console.error('Fehler beim Löschen des Entwurfs:', err);
             return res.status(500).json({ error: 'Fehler beim Löschen des Entwurfs.' });
@@ -1173,18 +1199,19 @@ app.post('/api/anwesenheit/pdf', async (req, res) => {
         // Info section
         doc.fontSize(12).font('Helvetica-Bold');
         doc.text(`Datum: ${datum}`, 50, doc.y);
-        doc.text(`Thema: ${thema || ''}`, 300, doc.y - 15);
+        doc.text(`Thema: ${normalizePDFText(thema)}`, 300, doc.y - 15);
         doc.moveDown(0.5);
-        doc.text(`Dienstleiter: ${dienstleiter || ''}`, 50, doc.y);
+        doc.text(`Dienstleiter: ${normalizePDFText(dienstleiter)}`, 50, doc.y);
         doc.moveDown(1.5);
 
         // Table header
         const tableTop = doc.y;
         const colWidths = { nr: 35, name: 160, anwesend: 60, nichtAnwesend: 80, entschuldigt: 80, bemerkung: 130 };
+        const totalWidth = colWidths.nr + colWidths.name + colWidths.anwesend + colWidths.nichtAnwesend + colWidths.entschuldigt + colWidths.bemerkung;
         let xPos = 50;
 
         doc.fontSize(9).font('Helvetica-Bold');
-        doc.rect(xPos, tableTop, colWidths.nr + colWidths.name + colWidths.anwesend + colWidths.nichtAnwesend + colWidths.entschuldigt + colWidths.bemerkung, 25).fill('#003049');
+        doc.rect(xPos, tableTop, totalWidth, 25).fill('#003049');
 
         doc.fillColor('white');
         doc.text('Nr.', xPos + 5, tableTop + 8, { width: colWidths.nr - 10, align: 'center' });
@@ -1215,7 +1242,7 @@ app.post('/api/anwesenheit/pdf', async (req, res) => {
 
             // Draw row background (alternating)
             if (index % 2 === 0) {
-                doc.rect(xPos, yPos, colWidths.nr + colWidths.name + colWidths.anwesend + colWidths.nichtAnwesend + colWidths.entschuldigt + colWidths.bemerkung, rowHeight).fill('#f8f9fa');
+                doc.rect(xPos, yPos, totalWidth, rowHeight).fill('#f8f9fa');
                 doc.fillColor('black');
             }
 
@@ -1223,36 +1250,40 @@ app.post('/api/anwesenheit/pdf', async (req, res) => {
             doc.text(person.nr, xPos + 5, yPos + 8, { width: colWidths.nr, align: 'center' });
             xPos += colWidths.nr;
 
-            // Name
-            doc.text(person.name || '', xPos + 5, yPos + 8, { width: colWidths.name });
+            // Name (mit UTF-8 Normalisierung)
+            doc.text(normalizePDFText(person.name), xPos + 5, yPos + 8, { width: colWidths.name });
             xPos += colWidths.name;
 
-            // Checkboxes for status
-            const checkboxY = yPos + 8;
+            // Checkboxes for status - nur für normale Dienste
+            if (!isSonder) {
+                const checkboxY = yPos + 7;  // Besser zentriert in der Zeile
 
-            // anwesend
-            doc.rect(xPos + 25, checkboxY, 10, 10).stroke();
-            if (person.status === 'anwesend') {
-                doc.text('X', xPos + 27, checkboxY + 1);
+                // anwesend
+                doc.rect(xPos + 25, checkboxY, 10, 10).stroke();
+                if (person.status === 'anwesend') {
+                    doc.text('X', xPos + 27, checkboxY + 1);
+                }
+                xPos += colWidths.anwesend;
+
+                // nicht anwesend
+                doc.rect(xPos + 15, checkboxY, 10, 10).stroke();
+                if (person.status === 'nicht_anwesend') {
+                    doc.text('X', xPos + 17, checkboxY + 1);
+                }
+                xPos += colWidths.nichtAnwesend;
+
+                // entschuldigt
+                doc.rect(xPos + 18, checkboxY, 10, 10).stroke();
+                if (person.status === 'entschuldigt') {
+                    doc.text('X', xPos + 20, checkboxY + 1);
+                }
+                xPos += colWidths.entschuldigt;
             }
-            xPos += colWidths.anwesend;
 
-            // nicht anwesend
-            doc.rect(xPos + 15, checkboxY, 10, 10).stroke();
-            if (person.status === 'nicht_anwesend') {
-                doc.text('X', xPos + 17, checkboxY + 1);
-            }
-            xPos += colWidths.nichtAnwesend;
-
-            // entschuldigt
-            doc.rect(xPos + 18, checkboxY, 10, 10).stroke();
-            if (person.status === 'entschuldigt') {
-                doc.text('X', xPos + 20, checkboxY + 1);
-            }
-            xPos += colWidths.entschuldigt;
-
-            // Bemerkung
-            doc.text(person.bemerkung || '', xPos + 5, yPos + 8, { width: colWidths.bemerkung });
+            // Bemerkung (mit UTF-8 Normalisierung)
+            doc.text(normalizePDFText(person.bemerkung), xPos + 5, yPos + 8, {
+                width: colWidths.bemerkung - 10
+            });
 
             yPos += rowHeight;
         });
@@ -1275,14 +1306,26 @@ app.post('/api/anwesenheit/email', async (req, res) => {
         return res.status(500).json({ error: 'E-Mail-Dienst nicht konfiguriert. Prüfen Sie die SMTP-Einstellungen.' });
     }
 
+    const { datum, thema, dienstleiter, teilnehmer, type } = req.body;
+
+    // Bestimme Email-Empfänger basierend auf dem Typ
     const EMAIL_RECIPIENTS_ANWESENHEIT = process.env.EMAIL_RECIPIENTS_ANWESENHEIT;
+    const EMAIL_RECIPIENTS_SONDER = process.env.EMAIL_RECIPIENTS_SONDER;
 
-    if (!EMAIL_RECIPIENTS_ANWESENHEIT) {
-        console.error('[ANWESENHEIT EMAIL] FEHLER: Keine Empfänger konfiguriert');
-        return res.status(500).json({ error: 'Keine E-Mail-Empfänger konfiguriert. Bitte EMAIL_RECIPIENTS_ANWESENHEIT in .env.smtp setzen.' });
+    let recipients;
+    if (type === 'sonder') {
+        recipients = EMAIL_RECIPIENTS_SONDER;
+        if (!recipients) {
+            console.error('[ANWESENHEIT EMAIL] FEHLER: Keine Empfänger für Sonderdienste konfiguriert');
+            return res.status(500).json({ error: 'Keine E-Mail-Empfänger konfiguriert. Bitte EMAIL_RECIPIENTS_SONDER in .env setzen.' });
+        }
+    } else {
+        recipients = EMAIL_RECIPIENTS_ANWESENHEIT;
+        if (!recipients) {
+            console.error('[ANWESENHEIT EMAIL] FEHLER: Keine Empfänger für Anwesenheitslisten konfiguriert');
+            return res.status(500).json({ error: 'Keine E-Mail-Empfänger konfiguriert. Bitte EMAIL_RECIPIENTS_ANWESENHEIT in .env setzen.' });
+        }
     }
-
-    const { datum, thema, dienstleiter, teilnehmer } = req.body;
 
     if (!datum) {
         return res.status(400).json({ error: 'Datum ist erforderlich.' });
@@ -1290,7 +1333,10 @@ app.post('/api/anwesenheit/email', async (req, res) => {
 
     try {
         // Generate PDF in memory
-        const doc = new PDFDocument({ size: 'A4', margin: 50 });
+        const doc = new PDFDocument({
+            size: 'A4',
+            margin: 50
+        });
         const chunks = [];
 
         doc.on('data', (chunk) => chunks.push(chunk));
@@ -1299,18 +1345,23 @@ app.post('/api/anwesenheit/email', async (req, res) => {
                 const pdfBuffer = Buffer.concat(chunks);
 
                 // Send email
+                const emailSubject = isSonder
+                    ? `Anwesenheitsliste Sonderdienst vom ${datum}${thema ? ' - ' + thema : ''}`
+                    : `Anwesenheitsliste Übungsdienst vom ${datum}${thema ? ' - ' + thema : ''}`;
+                const emailFilename = isSonder ? `Sonderdienst_${datum}.pdf` : `Anwesenheitsliste_${datum}.pdf`;
+
                 const mailOptions = {
                     from: SMTP_CONFIG.auth.user,
-                    to: EMAIL_RECIPIENTS_ANWESENHEIT,
-                    subject: `Anwesenheitsliste vom ${datum}${thema ? ' - ' + thema : ''}`,
-                    text: `Anbei finden Sie die Anwesenheitsliste vom ${datum}.\n\nThema: ${thema || 'Nicht angegeben'}\nDienstleiter: ${dienstleiter || 'Nicht angegeben'}\nTeilnehmer: ${teilnehmer.length}`,
+                    bcc: recipients, // BCC statt TO für Datenschutz - Empfänger sehen sich nicht
+                    subject: emailSubject,
+                    text: `Anbei finden Sie ${isSonder ? 'den Sonderdienst' : 'den Übungsdienst'} vom ${datum}.\n\nThema: ${thema || 'Nicht angegeben'}\nDienstleiter: ${dienstleiter || 'Nicht angegeben'}\nTeilnehmer: ${teilnehmer.length}`,
                     attachments: [{
-                        filename: `Anwesenheitsliste_${datum}.pdf`,
+                        filename: emailFilename,
                         content: pdfBuffer
                     }]
                 };
 
-                console.log('[ANWESENHEIT EMAIL] Sende E-Mail an:', EMAIL_RECIPIENTS_ANWESENHEIT);
+                console.log('[ANWESENHEIT EMAIL] Sende E-Mail (BCC) an:', recipients);
 
                 await mailTransporter.sendMail(mailOptions);
 
@@ -1323,8 +1374,11 @@ app.post('/api/anwesenheit/email', async (req, res) => {
         });
 
         // Generate PDF content
-        // Header
-        doc.fontSize(18).font('Helvetica-Bold').text('Anwesenheitsliste Dienst LZ Frechen', { align: 'center' });
+        // Header - unterschiedlich je nach Type
+        const isSonder = type === 'sonder';
+        const title = isSonder ? 'Sonderdienst LZ Frechen' : 'Anwesenheitsliste Dienst LZ Frechen';
+
+        doc.fontSize(18).font('Helvetica-Bold').text(title, { align: 'center' });
         doc.moveDown(0.5);
         doc.fontSize(10).font('Helvetica').text(`Stand ${new Date().toLocaleDateString('de-DE')}`, { align: 'right' });
         doc.moveDown(1);
@@ -1332,30 +1386,43 @@ app.post('/api/anwesenheit/email', async (req, res) => {
         // Info section
         doc.fontSize(12).font('Helvetica-Bold');
         doc.text(`Datum: ${datum}`, 50, doc.y);
-        doc.text(`Thema: ${thema || ''}`, 300, doc.y - 15);
+        doc.text(`Thema: ${normalizePDFText(thema)}`, 300, doc.y - 15);
         doc.moveDown(0.5);
-        doc.text(`Dienstleiter: ${dienstleiter || ''}`, 50, doc.y);
+        doc.text(`Dienstleiter: ${normalizePDFText(dienstleiter)}`, 50, doc.y);
         doc.moveDown(1.5);
 
-        // Table header
+        // Table header - unterschiedlich je nach Type
         const tableTop = doc.y;
-        const colWidths = { nr: 35, name: 160, anwesend: 60, nichtAnwesend: 80, entschuldigt: 80, bemerkung: 130 };
+        const colWidths = isSonder
+            ? { nr: 35, name: 200, bemerkung: 310 }  // Sonderdienst: Keine Anwesenheit-Spalten
+            : { nr: 35, name: 160, anwesend: 60, nichtAnwesend: 80, entschuldigt: 80, bemerkung: 130 };  // Normal: Mit Anwesenheit
         let xPos = 50;
 
         doc.fontSize(9).font('Helvetica-Bold');
-        doc.rect(xPos, tableTop, colWidths.nr + colWidths.name + colWidths.anwesend + colWidths.nichtAnwesend + colWidths.entschuldigt + colWidths.bemerkung, 25).fill('#003049');
+
+        // Berechne Gesamtbreite abhängig vom Type
+        const totalWidth = isSonder
+            ? colWidths.nr + colWidths.name + colWidths.bemerkung
+            : colWidths.nr + colWidths.name + colWidths.anwesend + colWidths.nichtAnwesend + colWidths.entschuldigt + colWidths.bemerkung;
+
+        doc.rect(xPos, tableTop, totalWidth, 25).fill('#003049');
 
         doc.fillColor('white');
         doc.text('Nr.', xPos + 5, tableTop + 8, { width: colWidths.nr - 10, align: 'center' });
         xPos += colWidths.nr;
         doc.text('Name', xPos + 5, tableTop + 8, { width: colWidths.name - 10 });
         xPos += colWidths.name;
-        doc.text('anwesend', xPos + 5, tableTop + 8, { width: colWidths.anwesend - 10, align: 'center' });
-        xPos += colWidths.anwesend;
-        doc.text('nicht\nanwesend', xPos + 5, tableTop + 4, { width: colWidths.nichtAnwesend - 10, align: 'center' });
-        xPos += colWidths.nichtAnwesend;
-        doc.text('entschuldigt', xPos + 5, tableTop + 8, { width: colWidths.entschuldigt - 10, align: 'center' });
-        xPos += colWidths.entschuldigt;
+
+        // Nur für normale Dienste: Anwesenheit-Spalten
+        if (!isSonder) {
+            doc.text('anwesend', xPos + 5, tableTop + 8, { width: colWidths.anwesend - 10, align: 'center' });
+            xPos += colWidths.anwesend;
+            doc.text('nicht\nanwesend', xPos + 5, tableTop + 4, { width: colWidths.nichtAnwesend - 10, align: 'center' });
+            xPos += colWidths.nichtAnwesend;
+            doc.text('entschuldigt', xPos + 5, tableTop + 8, { width: colWidths.entschuldigt - 10, align: 'center' });
+            xPos += colWidths.entschuldigt;
+        }
+
         doc.text('Bemerkung / Info', xPos + 5, tableTop + 8, { width: colWidths.bemerkung - 10 });
 
         doc.fillColor('black');
@@ -1374,7 +1441,7 @@ app.post('/api/anwesenheit/email', async (req, res) => {
 
             // Draw row background (alternating)
             if (index % 2 === 0) {
-                doc.rect(xPos, yPos, colWidths.nr + colWidths.name + colWidths.anwesend + colWidths.nichtAnwesend + colWidths.entschuldigt + colWidths.bemerkung, rowHeight).fill('#f8f9fa');
+                doc.rect(xPos, yPos, totalWidth, rowHeight).fill('#f8f9fa');
                 doc.fillColor('black');
             }
 
@@ -1382,36 +1449,40 @@ app.post('/api/anwesenheit/email', async (req, res) => {
             doc.text(person.nr, xPos + 5, yPos + 8, { width: colWidths.nr, align: 'center' });
             xPos += colWidths.nr;
 
-            // Name
-            doc.text(person.name || '', xPos + 5, yPos + 8, { width: colWidths.name });
+            // Name (mit UTF-8 Normalisierung)
+            doc.text(normalizePDFText(person.name), xPos + 5, yPos + 8, { width: colWidths.name });
             xPos += colWidths.name;
 
-            // Checkboxes for status
-            const checkboxY = yPos + 8;
+            // Checkboxes for status - nur für normale Dienste
+            if (!isSonder) {
+                const checkboxY = yPos + 7;  // Besser zentriert in der Zeile
 
-            // anwesend
-            doc.rect(xPos + 25, checkboxY, 10, 10).stroke();
-            if (person.status === 'anwesend') {
-                doc.text('X', xPos + 27, checkboxY + 1);
+                // anwesend
+                doc.rect(xPos + 25, checkboxY, 10, 10).stroke();
+                if (person.status === 'anwesend') {
+                    doc.text('X', xPos + 27, checkboxY + 1);
+                }
+                xPos += colWidths.anwesend;
+
+                // nicht anwesend
+                doc.rect(xPos + 15, checkboxY, 10, 10).stroke();
+                if (person.status === 'nicht_anwesend') {
+                    doc.text('X', xPos + 17, checkboxY + 1);
+                }
+                xPos += colWidths.nichtAnwesend;
+
+                // entschuldigt
+                doc.rect(xPos + 18, checkboxY, 10, 10).stroke();
+                if (person.status === 'entschuldigt') {
+                    doc.text('X', xPos + 20, checkboxY + 1);
+                }
+                xPos += colWidths.entschuldigt;
             }
-            xPos += colWidths.anwesend;
 
-            // nicht anwesend
-            doc.rect(xPos + 15, checkboxY, 10, 10).stroke();
-            if (person.status === 'nicht_anwesend') {
-                doc.text('X', xPos + 17, checkboxY + 1);
-            }
-            xPos += colWidths.nichtAnwesend;
-
-            // entschuldigt
-            doc.rect(xPos + 18, checkboxY, 10, 10).stroke();
-            if (person.status === 'entschuldigt') {
-                doc.text('X', xPos + 20, checkboxY + 1);
-            }
-            xPos += colWidths.entschuldigt;
-
-            // Bemerkung
-            doc.text(person.bemerkung || '', xPos + 5, yPos + 8, { width: colWidths.bemerkung });
+            // Bemerkung (mit UTF-8 Normalisierung)
+            doc.text(normalizePDFText(person.bemerkung), xPos + 5, yPos + 8, {
+                width: colWidths.bemerkung - 10
+            });
 
             yPos += rowHeight;
         });
