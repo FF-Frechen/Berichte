@@ -540,14 +540,13 @@
 
       tbody.appendChild(row);
 
-      // Setup autocomplete for name field
+      // Setup autocomplete for this row
       const nameInput = row.querySelector('.name-input');
       setupAutocomplete(nameInput);
 
-      // Setup blur handlers for both name and bemerkung
+      // Setup delete-on-empty for bemerkung field
       const bemerkungInput = row.querySelector('.bemerkung-input');
-      nameInput.addEventListener('blur', () => checkAndDeleteEmptyRow(row));
-      bemerkungInput.addEventListener('blur', () => checkAndDeleteEmptyRow(row));
+      setupDeleteOnEmpty(bemerkungInput, row);
 
       // Add change listeners for auto-save
       row.querySelectorAll('input').forEach(input => {
@@ -592,14 +591,13 @@
 
       tbody.appendChild(row);
 
-      // Setup autocomplete for name field
+      // Setup autocomplete for this row
       const nameInput = row.querySelector('.name-input');
       setupAutocomplete(nameInput);
 
-      // Setup blur handlers for both name and bemerkung
+      // Setup delete-on-empty for bemerkung field
       const bemerkungInput = row.querySelector('.bemerkung-input');
-      nameInput.addEventListener('blur', () => checkAndDeleteEmptyRow(row));
-      bemerkungInput.addEventListener('blur', () => checkAndDeleteEmptyRow(row));
+      setupDeleteOnEmpty(bemerkungInput, row);
 
       // Add change listeners for auto-save
       row.querySelectorAll('input').forEach(input => {
@@ -610,34 +608,39 @@
       renumberRows();
     }
 
-    // NEUE EINFACHE LOGIK: Prüfe und lösche leere Zeilen
-    function checkAndDeleteEmptyRow(row) {
-      setTimeout(() => {
-        // Hole aktuelle Daten
-        const tbody = document.getElementById('attendance-tbody');
-        const rows = tbody.querySelectorAll('tr');
-        const rowIndex = Array.from(rows).indexOf(row);
+    // Setup delete-on-empty for input fields (name or bemerkung)
+    function setupDeleteOnEmpty(input, row) {
+      let hadContent = false;
 
-        // Nur löschen wenn:
-        // 1. Zeile existiert noch im DOM
-        // 2. Nicht die erste Zeile (Index 0 behalten)
-        // 3. Nicht die letzte Zeile (neue leere Zeile für Eingabe)
-        // 4. Mehr als eine Zeile vorhanden (mindestens eine Zeile behalten)
-        // 5. Name UND Bemerkung sind leer (Radio-Button Status ist egal)
-        if (!row.parentNode || rowIndex === 0 || rowIndex === rows.length - 1 || rows.length <= 1) {
-          return; // Nicht löschen
+      // Track if user has entered content
+      input.addEventListener('input', function() {
+        if (this.value.trim().length > 0) {
+          hadContent = true;
         }
+      });
 
-        const name = row.querySelector('.name-input')?.value.trim() || '';
-        const bemerkung = row.querySelector('.bemerkung-input')?.value.trim() || '';
+      // Delete empty rows when field is cleared
+      input.addEventListener('blur', function() {
+        setTimeout(() => {
+          const tbody = document.getElementById('attendance-tbody');
+          const rows = tbody.querySelectorAll('tr');
+          const currentRowIndex = Array.from(rows).indexOf(row);
 
-        // Lösche wenn Name und Bemerkung leer (auch wenn Radio-Button ausgewählt)
-        if (!name && !bemerkung) {
-          row.remove();
-          renumberRows();
-          triggerAutoSave();
-        }
-      }, 200); // Kurze Verzögerung für Tab-Navigation
+          const name = row.querySelector('.name-input')?.value.trim() || '';
+          const bemerkung = row.querySelector('.bemerkung-input')?.value.trim() || '';
+
+          // Only delete if:
+          // - Not the first row
+          // - User had previously entered content (hadContent = true)
+          // - Name AND Bemerkung are empty (ignore radio button status)
+          // - Row still exists in DOM
+          if (currentRowIndex > 0 && hadContent && !name && !bemerkung && row.parentNode) {
+            row.remove();
+            renumberRows();
+            triggerAutoSave();
+          }
+        }, 200);
+      });
     }
 
     // Setup autocomplete for a specific input field
@@ -684,6 +687,9 @@
           autocompleteDiv.appendChild(div);
         });
       });
+
+      // Setup delete-on-empty for name field
+      setupDeleteOnEmpty(input, row);
 
       input.addEventListener('keydown', function(e) {
         const items = autocompleteDiv.getElementsByTagName('div');
