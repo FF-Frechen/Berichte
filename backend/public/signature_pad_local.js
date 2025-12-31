@@ -16,7 +16,7 @@ class SignaturePad {
     };
 
     this.isDrawing = false;
-    this.isEmpty = true;
+    this._isEmpty = true;
     this.points = [];
     this.strokes = []; // Speichert alle Strokes für toData/fromData
 
@@ -69,7 +69,7 @@ class SignaturePad {
   _handleMouseDown(e) {
     e.preventDefault();
     this.isDrawing = true;
-    this.isEmpty = false;
+    this._isEmpty = false;
     const pos = this._getMousePos(e);
     this._startStroke(pos);
   }
@@ -91,7 +91,7 @@ class SignaturePad {
   _handleTouchStart(e) {
     e.preventDefault();
     this.isDrawing = true;
-    this.isEmpty = false;
+    this._isEmpty = false;
     const pos = this._getTouchPos(e);
     this._startStroke(pos);
   }
@@ -134,7 +134,7 @@ class SignaturePad {
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     this.ctx.fillStyle = this.options.backgroundColor;
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-    this.isEmpty = true;
+    this._isEmpty = true;
     this.strokes = [];
   }
 
@@ -143,7 +143,7 @@ class SignaturePad {
   }
 
   isEmpty() {
-    return this.isEmpty;
+    return this._isEmpty;
   }
 
   toData() {
@@ -161,7 +161,7 @@ class SignaturePad {
     if (!data || data.length === 0) return;
 
     this.clear();
-    this.isEmpty = false;
+    this._isEmpty = false;
 
     data.forEach(strokeData => {
       const points = strokeData.points || strokeData;
