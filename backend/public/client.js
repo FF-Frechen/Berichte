@@ -9,6 +9,8 @@ let currentPosition;
 let currentRow;
 let currentVersionToSend = null;
 let currentVersionPdfId = null;
+let autoSaveTimeout = null;
+let isSaving = false;
 
 const SERVER_URL = '/api';
 
@@ -247,6 +249,7 @@ function createFahrzeugSection(fahrzeugTyp) {
     nameInput.addEventListener("change", (e) => {
       besatzungen[fahrzeugTyp][index].name = e.target.value;
       saveDataLocal();
+      triggerAutoSave();
     });
     nameCell.appendChild(nameInput);
     row.appendChild(nameCell);
@@ -286,6 +289,7 @@ function createFahrzeugSection(fahrzeugTyp) {
         paInput.required = false;
       }
       saveDataLocal();
+      triggerAutoSave();
     });
     const paInput = document.createElement("input");
     paInput.type = "number";
@@ -298,6 +302,7 @@ function createFahrzeugSection(fahrzeugTyp) {
     paInput.addEventListener("change", (e) => {
       besatzungen[fahrzeugTyp][index].paMinuten = e.target.value;
       saveDataLocal();
+      triggerAutoSave();
     });
     paInput.addEventListener("blur", (e) => {
       const checkbox = paCell.querySelector('input[type="checkbox"]');
@@ -446,6 +451,62 @@ async function saveData() {
     showSaveNotification('⚠ Netzwerkfehler - Lokal gespeichert', true);
     return false;
   }
+}
+
+// Auto-save function (silent, no notifications)
+async function autoSave() {
+  if (isSaving) return;
+
+  isSaving = true;
+  saveDataLocal();
+
+  const besatzungenArray = [];
+  getSelectedFahrzeuge().forEach(fahrzeugTyp => {
+    besatzungen[fahrzeugTyp].forEach(member => {
+      besatzungenArray.push({
+        fahrzeug: fahrzeugTyp,
+        position: member.position,
+        name: member.name || "",
+        signature: member.signature || "",
+        pa: member.pa || false,
+        paMinuten: member.paMinuten || ""
+      });
+    });
+  });
+
+  const einsatzData = {
+    einsatznummer: currentEinsatzId,
+    datum: document.getElementById('info-datum').textContent,
+    uhrzeit: document.getElementById('info-uhrzeit').textContent,
+    einsatzstelle: document.getElementById('info-einsatzstelle').textContent,
+    einsatzleiter: document.getElementById('info-einsatzleiter').textContent,
+    fahrzeuge: getSelectedFahrzeuge().map(f => ({
+      fahrzeug: f,
+      name: f,
+      bereitstellung: document.getElementById(`bereit-${f}`)?.checked || false
+    })),
+    besatzungen: besatzungenArray
+  };
+
+  try {
+    await fetch(`${SERVER_URL}/einsatz`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(einsatzData)
+    });
+  } catch (error) {
+    console.log('Auto-save: Netzwerkfehler, lokal gespeichert');
+  } finally {
+    isSaving = false;
+  }
+}
+
+// Trigger auto-save with debounce
+function triggerAutoSave() {
+  if (autoSaveTimeout) {
+    clearTimeout(autoSaveTimeout);
+  }
+  autoSaveTimeout = setTimeout(autoSave, 1000); // Save after 1 second of inactivity
 }
 
 // OPTIMIERT: PDF-Generierung nur noch über Backend-API
@@ -802,8 +863,9 @@ function saveSignature() {
   
   const signButton = currentRow.querySelector("button");
   signButton.textContent = "Neu unterschreiben";
-  
+
   saveDataLocal();
+  triggerAutoSave();
   closeSignatureModal();
 }
 
@@ -870,6 +932,12 @@ function updateFahrzeugCheckboxes() {
   const checkboxes = container.querySelectorAll('input[type="checkbox"][id^="fahrzeug-"]');
   checkboxes.forEach(checkbox => {
     checkbox.addEventListener("change", updateFahrzeugTables);
+  });
+
+  // Event-Listener für Bereitstellungs-Checkboxen (Auto-Save)
+  const bereitCheckboxes = container.querySelectorAll('input[type="checkbox"][id^="bereit-"]');
+  bereitCheckboxes.forEach(checkbox => {
+    checkbox.addEventListener("change", triggerAutoSave);
   });
 
   console.log('✓ Fahrzeug-Checkboxen dynamisch generiert');
