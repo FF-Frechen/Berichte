@@ -1345,14 +1345,16 @@ app.post('/api/anwesenheit/email', async (req, res) => {
                 const pdfBuffer = Buffer.concat(chunks);
 
                 // Send email
-                const emailSubject = isSonder ? `Sonderdienst vom ${datum}${thema ? ' - ' + thema : ''}` : `Anwesenheitsliste vom ${datum}${thema ? ' - ' + thema : ''}`;
+                const emailSubject = isSonder
+                    ? `Anwesenheitsliste Sonderdienst vom ${datum}${thema ? ' - ' + thema : ''}`
+                    : `Anwesenheitsliste Übungsdienst vom ${datum}${thema ? ' - ' + thema : ''}`;
                 const emailFilename = isSonder ? `Sonderdienst_${datum}.pdf` : `Anwesenheitsliste_${datum}.pdf`;
 
                 const mailOptions = {
                     from: SMTP_CONFIG.auth.user,
                     bcc: recipients, // BCC statt TO für Datenschutz - Empfänger sehen sich nicht
                     subject: emailSubject,
-                    text: `Anbei finden Sie ${isSonder ? 'den Sonderdienst' : 'die Anwesenheitsliste'} vom ${datum}.\n\nThema: ${thema || 'Nicht angegeben'}\nDienstleiter: ${dienstleiter || 'Nicht angegeben'}\nTeilnehmer: ${teilnehmer.length}`,
+                    text: `Anbei finden Sie ${isSonder ? 'den Sonderdienst' : 'den Übungsdienst'} vom ${datum}.\n\nThema: ${thema || 'Nicht angegeben'}\nDienstleiter: ${dienstleiter || 'Nicht angegeben'}\nTeilnehmer: ${teilnehmer.length}`,
                     attachments: [{
                         filename: emailFilename,
                         content: pdfBuffer
