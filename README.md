@@ -2,8 +2,6 @@
 
 Ein Docker-basiertes System zur Verwaltung von Einsatzberichten und Anwesenheitslisten für die Feuerwehr Frechen.
 
-⚠️ **WICHTIG: Dies ist eine private Repository!** Nicht öffentlich teilen.
-
 ## 📋 Features
 
 - 📝 **Einsatzberichte** erstellen und als PDF speichern (mit Unterschriften)
