@@ -308,7 +308,7 @@ function createFahrzeugSection(fahrzeugTyp) {
       const checkbox = paCell.querySelector('input[type="checkbox"]');
       if (checkbox.checked && (e.target.value === '' || e.target.value === null)) {
         alert('⚠️ Bitte geben Sie die PA-Zeit in Minuten an (0 ist erlaubt)!');
-        e.target.focus();
+        // KEIN focus() hier - verursacht Endlos-Loop!
       }
     });
     paCell.appendChild(paCheckbox);
