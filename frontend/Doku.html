@@ -386,6 +386,50 @@
       cursor: pointer;
       padding: 8px;
     }
+
+    /* Optimierung für Portrait/Hochformat (Tablet/Mobile) */
+    @media (max-width: 900px), (orientation: portrait) {
+      /* Größere Schrift für bessere Lesbarkeit */
+      body {
+        font-size: 16px;
+      }
+
+      th, td {
+        font-size: 15px;
+        padding: 10px 6px;
+      }
+
+      /* Name-Spalte breiter */
+      table td:nth-child(2),
+      table th:nth-child(2) {
+        min-width: 120px;
+        font-size: 16px;
+      }
+
+      /* Input-Felder größer */
+      input[type="text"], input[type="number"] {
+        font-size: 16px;
+        padding: 10px;
+      }
+
+      /* PA-Spalte breiter für Checkbox + Input */
+      table td:last-child,
+      table th:last-child {
+        min-width: 100px;
+      }
+
+      /* PA-Input besser positioniert */
+      input[type="number"][id^="pa-input-"] {
+        width: 60px;
+        font-size: 16px;
+        margin-top: 8px;
+      }
+
+      /* Tabelle scrollbar bei Bedarf */
+      .fahrzeug-table-container {
+        overflow-x: auto;
+      }
+    }
   </style>
 </head>
 <body>
