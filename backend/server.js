@@ -1432,16 +1432,16 @@ app.post('/api/anwesenheit/email', async (req, res) => {
         // Table header - unterschiedlich je nach Type
         const tableTop = doc.y;
         const colWidths = isSonder
-            ? { nr: 35, name: 200, bemerkung: 310 }  // Sonderdienst: Keine Anwesenheit-Spalten
-            : { nr: 35, name: 160, anwesend: 60, nichtAnwesend: 80, entschuldigt: 80, bemerkung: 130 };  // Normal: Mit Anwesenheit
+            ? { nr: 30, name: 150, bemerkung: 200, signature: 115 }  // Sonderdienst: Keine Anwesenheit-Spalten
+            : { nr: 30, name: 120, anwesend: 50, nichtAnwesend: 60, entschuldigt: 60, bemerkung: 90, signature: 85 };  // Normal: Mit Anwesenheit
         let xPos = 50;
 
         doc.fontSize(9).font('Helvetica-Bold');
 
         // Berechne Gesamtbreite abhängig vom Type
         const totalWidth = isSonder
-            ? colWidths.nr + colWidths.name + colWidths.bemerkung
-            : colWidths.nr + colWidths.name + colWidths.anwesend + colWidths.nichtAnwesend + colWidths.entschuldigt + colWidths.bemerkung;
+            ? colWidths.nr + colWidths.name + colWidths.bemerkung + colWidths.signature
+            : colWidths.nr + colWidths.name + colWidths.anwesend + colWidths.nichtAnwesend + colWidths.entschuldigt + colWidths.bemerkung + colWidths.signature;
 
         doc.rect(xPos, tableTop, totalWidth, 25).fill('#003049');
 
@@ -1462,6 +1462,8 @@ app.post('/api/anwesenheit/email', async (req, res) => {
         }
 
         doc.text('Bemerkung / Info', xPos + 5, tableTop + 8, { width: colWidths.bemerkung - 10 });
+        xPos += colWidths.bemerkung;
+        doc.text('Unterschrift', xPos + 5, tableTop + 8, { width: colWidths.signature - 10, align: 'center' });
 
         doc.fillColor('black');
         let yPos = tableTop + 30;
@@ -1475,7 +1477,7 @@ app.post('/api/anwesenheit/email', async (req, res) => {
             }
 
             xPos = 50;
-            const rowHeight = 25;
+            const rowHeight = 35; // Erhöht für Unterschriften
 
             // Draw row background (alternating)
             if (index % 2 === 0) {
@@ -1521,6 +1523,25 @@ app.post('/api/anwesenheit/email', async (req, res) => {
             doc.text(normalizePDFText(person.bemerkung), xPos + 5, yPos + 8, {
                 width: colWidths.bemerkung - 10
             });
+            xPos += colWidths.bemerkung;
+
+            // Unterschrift (wenn vorhanden)
+            if (person.signature && person.signature.trim() !== '') {
+                try {
+                    const signX = xPos + 5;
+                    const signY = yPos + 5;
+                    const signWidth = colWidths.signature - 10;
+                    const signHeight = 25;
+
+                    doc.image(person.signature, signX, signY, {
+                        fit: [signWidth, signHeight],
+                        align: 'center',
+                        valign: 'center'
+                    });
+                } catch (error) {
+                    console.error('[ANWESENHEIT EMAIL] Fehler beim Einfügen der Unterschrift:', error);
+                }
+            }
 
             yPos += rowHeight;
         });
