@@ -286,8 +286,8 @@
       margin: 10% auto;
       padding: 20px;
       border-radius: 8px;
-      width: 80%;
-      max-width: 600px;
+      width: 90%;
+      max-width: 500px;
     }
 
     .close {
@@ -619,6 +619,9 @@
       const bemerkungInput = row.querySelector('.bemerkung-input');
       setupDeleteOnEmpty(bemerkungInput, row);
 
+      // Setup signature button visibility
+      setupSignatureVisibility(row);
+
       // Add change listeners for auto-save
       row.querySelectorAll('input').forEach(input => {
         input.addEventListener('input', triggerAutoSave);
@@ -662,6 +665,9 @@
       const bemerkungInput = row.querySelector('.bemerkung-input');
       setupDeleteOnEmpty(bemerkungInput, row);
 
+      // Setup signature button visibility
+      setupSignatureVisibility(row);
+
       // Add change listeners for auto-save
       row.querySelectorAll('input').forEach(input => {
         input.addEventListener('input', triggerAutoSave);
@@ -669,6 +675,32 @@
       });
 
       renumberRows();
+    }
+
+    // Setup signature button visibility based on name input
+    function setupSignatureVisibility(row) {
+      const nameInput = row.querySelector('.name-input');
+      const signatureButton = row.querySelector('.signature-column button');
+      const signatureImg = row.querySelector('.signature-column img');
+      const signatureData = row.querySelector('.signature-column input[type="hidden"]');
+
+      // Initially hide button if no name
+      if (!nameInput.value.trim()) {
+        signatureButton.style.display = 'none';
+      }
+
+      nameInput.addEventListener('input', function() {
+        if (this.value.trim() === '') {
+          // Reset signature when name is cleared
+          signatureImg.classList.add('hidden');
+          signatureImg.src = '';
+          signatureData.value = '';
+          signatureButton.style.display = 'none';
+        } else {
+          // Show signature button when name is entered
+          signatureButton.style.display = 'inline-block';
+        }
+      });
     }
 
     // Setup delete-on-empty for input fields (name or bemerkung)
@@ -691,13 +723,14 @@
 
           const name = row.querySelector('.name-input')?.value.trim() || '';
           const bemerkung = row.querySelector('.bemerkung-input')?.value.trim() || '';
+          const signatureData = row.querySelector('.signature-column input[type="hidden"]')?.value || '';
 
           // Only delete if:
           // - Not the first row
           // - User had previously entered content (hadContent = true)
-          // - Name AND Bemerkung are empty (ignore radio button status)
+          // - Name AND Bemerkung AND Signature are empty
           // - Row still exists in DOM
-          if (currentRowIndex > 0 && hadContent && !name && !bemerkung && row.parentNode) {
+          if (currentRowIndex > 0 && hadContent && !name && !bemerkung && !signatureData && row.parentNode) {
             row.remove();
             renumberRows();
             triggerAutoSave();
