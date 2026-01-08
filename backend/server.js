@@ -1204,10 +1204,23 @@ app.post('/api/anwesenheit/pdf', async (req, res) => {
         doc.text(`Dienstleiter: ${normalizePDFText(dienstleiter)}`, 50, doc.y);
         doc.moveDown(1.5);
 
+        // Determine if this is "Sonderdienst" (no attendance status)
+        const isSonder = req.body.type === 'sonder';
+
         // Table header
         const tableTop = doc.y;
-        const colWidths = { nr: 35, name: 160, anwesend: 60, nichtAnwesend: 80, entschuldigt: 80, bemerkung: 130 };
-        const totalWidth = colWidths.nr + colWidths.name + colWidths.anwesend + colWidths.nichtAnwesend + colWidths.entschuldigt + colWidths.bemerkung;
+        let colWidths, totalWidth;
+
+        if (isSonder) {
+            // Sonderdienst: Nr, Name, Bemerkung, Unterschrift
+            colWidths = { nr: 30, name: 150, bemerkung: 200, signature: 115 };
+            totalWidth = colWidths.nr + colWidths.name + colWidths.bemerkung + colWidths.signature;
+        } else {
+            // Normale Dienste: Nr, Name, Status-Checkboxen, Bemerkung, Unterschrift
+            colWidths = { nr: 30, name: 120, anwesend: 50, nichtAnwesend: 60, entschuldigt: 60, bemerkung: 90, signature: 85 };
+            totalWidth = colWidths.nr + colWidths.name + colWidths.anwesend + colWidths.nichtAnwesend + colWidths.entschuldigt + colWidths.bemerkung + colWidths.signature;
+        }
+
         let xPos = 50;
 
         doc.fontSize(9).font('Helvetica-Bold');
@@ -1218,13 +1231,19 @@ app.post('/api/anwesenheit/pdf', async (req, res) => {
         xPos += colWidths.nr;
         doc.text('Name', xPos + 5, tableTop + 8, { width: colWidths.name - 10 });
         xPos += colWidths.name;
-        doc.text('anwesend', xPos + 5, tableTop + 8, { width: colWidths.anwesend - 10, align: 'center' });
-        xPos += colWidths.anwesend;
-        doc.text('nicht\nanwesend', xPos + 5, tableTop + 4, { width: colWidths.nichtAnwesend - 10, align: 'center' });
-        xPos += colWidths.nichtAnwesend;
-        doc.text('entschuldigt', xPos + 5, tableTop + 8, { width: colWidths.entschuldigt - 10, align: 'center' });
-        xPos += colWidths.entschuldigt;
+
+        if (!isSonder) {
+            doc.text('anwesend', xPos + 5, tableTop + 8, { width: colWidths.anwesend - 10, align: 'center' });
+            xPos += colWidths.anwesend;
+            doc.text('nicht\nanwesend', xPos + 5, tableTop + 4, { width: colWidths.nichtAnwesend - 10, align: 'center' });
+            xPos += colWidths.nichtAnwesend;
+            doc.text('entschuldigt', xPos + 5, tableTop + 8, { width: colWidths.entschuldigt - 10, align: 'center' });
+            xPos += colWidths.entschuldigt;
+        }
+
         doc.text('Bemerkung / Info', xPos + 5, tableTop + 8, { width: colWidths.bemerkung - 10 });
+        xPos += colWidths.bemerkung;
+        doc.text('Unterschrift', xPos + 5, tableTop + 8, { width: colWidths.signature - 10, align: 'center' });
 
         doc.fillColor('black');
         let yPos = tableTop + 30;
@@ -1238,7 +1257,7 @@ app.post('/api/anwesenheit/pdf', async (req, res) => {
             }
 
             xPos = 50;
-            const rowHeight = 25;
+            const rowHeight = 35; // Erhöht für Unterschriften
 
             // Draw row background (alternating)
             if (index % 2 === 0) {
@@ -1259,23 +1278,23 @@ app.post('/api/anwesenheit/pdf', async (req, res) => {
                 const checkboxY = yPos + 7;  // Besser zentriert in der Zeile
 
                 // anwesend
-                doc.rect(xPos + 25, checkboxY, 10, 10).stroke();
+                doc.rect(xPos + 18, checkboxY, 10, 10).stroke();
                 if (person.status === 'anwesend') {
-                    doc.text('X', xPos + 27, checkboxY + 1);
+                    doc.text('X', xPos + 20, checkboxY + 1);
                 }
                 xPos += colWidths.anwesend;
 
                 // nicht anwesend
-                doc.rect(xPos + 15, checkboxY, 10, 10).stroke();
+                doc.rect(xPos + 23, checkboxY, 10, 10).stroke();
                 if (person.status === 'nicht_anwesend') {
-                    doc.text('X', xPos + 17, checkboxY + 1);
+                    doc.text('X', xPos + 25, checkboxY + 1);
                 }
                 xPos += colWidths.nichtAnwesend;
 
                 // entschuldigt
-                doc.rect(xPos + 18, checkboxY, 10, 10).stroke();
+                doc.rect(xPos + 23, checkboxY, 10, 10).stroke();
                 if (person.status === 'entschuldigt') {
-                    doc.text('X', xPos + 20, checkboxY + 1);
+                    doc.text('X', xPos + 25, checkboxY + 1);
                 }
                 xPos += colWidths.entschuldigt;
             }
@@ -1284,6 +1303,25 @@ app.post('/api/anwesenheit/pdf', async (req, res) => {
             doc.text(normalizePDFText(person.bemerkung), xPos + 5, yPos + 8, {
                 width: colWidths.bemerkung - 10
             });
+            xPos += colWidths.bemerkung;
+
+            // Unterschrift (wenn vorhanden)
+            if (person.signature && person.signature.trim() !== '') {
+                try {
+                    const signX = xPos + 5;
+                    const signY = yPos + 5;
+                    const signWidth = colWidths.signature - 10;
+                    const signHeight = 25;
+
+                    doc.image(person.signature, signX, signY, {
+                        fit: [signWidth, signHeight],
+                        align: 'center',
+                        valign: 'center'
+                    });
+                } catch (error) {
+                    console.error('Fehler beim Einfügen der Unterschrift:', error);
+                }
+            }
 
             yPos += rowHeight;
         });
