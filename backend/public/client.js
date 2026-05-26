@@ -825,16 +825,29 @@ function openSignatureModal(fahrzeugTyp, index, position, row) {
 
   document.getElementById("current-position").textContent = position;
   document.getElementById("signature-modal").style.display = "block";
-  
+
+  // Canvas erst dimensionieren, dann Inhalte laden – sonst wird die geladene
+  // Unterschrift durch das anschließende Resize wieder gelöscht.
+  resizeCanvas();
+
   if (signaturePad) {
     signaturePad.clear();
+
+    const existing = besatzungen[fahrzeugTyp][index].signature;
+    if (existing) {
+      try {
+        const result = signaturePad.fromDataURL(existing);
+        if (result && typeof result.catch === "function") {
+          result.catch((err) => {
+            console.warn("Konnte vorhandene Unterschrift nicht laden:", err);
+          });
+        }
+      } catch (err) {
+        // Fehler beim Wiederherstellen dürfen das Modal nicht blockieren.
+        console.warn("Konnte vorhandene Unterschrift nicht laden:", err);
+      }
+    }
   }
-  
-  if (besatzungen[fahrzeugTyp][index].signature) {
-    signaturePad.fromDataURL(besatzungen[fahrzeugTyp][index].signature);
-  }
-  
-  resizeCanvas();
 }
 
 function closeSignatureModal() {
@@ -882,13 +895,28 @@ function initSignaturePad() {
 
 function resizeCanvas() {
   const canvas = document.getElementById("signature-pad");
+  if (!canvas) return;
+
+  // Wenn das Modal noch nicht sichtbar ist, hat das Canvas Größe 0 –
+  // dann kein Resize durchführen, sonst geht die laufende Zeichnung verloren.
+  if (canvas.offsetWidth === 0 || canvas.offsetHeight === 0) {
+    return;
+  }
+
   const ratio = Math.max(window.devicePixelRatio || 1, 1);
+
+  // Bestehende Strokes sichern, BEVOR canvas.width/height neu gesetzt werden
+  // (das resettet den Canvas-Inhalt).
+  const data = signaturePad ? signaturePad.toData() : null;
+
   canvas.width = canvas.offsetWidth * ratio;
   canvas.height = canvas.offsetHeight * ratio;
-  canvas.getContext("2d").scale(ratio, ratio);
-  
+  const ctx = canvas.getContext("2d");
+  ctx.scale(ratio, ratio);
+
   if (signaturePad) {
-    const data = signaturePad.toData();
+    // clear() malt den weißen Hintergrund neu und setzt den Stift-Stil
+    // wieder korrekt (nach width/height-Reset waren die ctx-Properties default).
     signaturePad.clear();
     if (data && data.length > 0) {
       signaturePad.fromData(data);
