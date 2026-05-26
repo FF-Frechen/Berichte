@@ -14,6 +14,36 @@ let isSaving = false;
 
 const SERVER_URL = '/api';
 
+// Robustes Lesen aus localStorage – korrupte/abgebrochene Einträge dürfen die App
+// nicht crashen lassen (kann auf Android-WebView nach unterbrochenem Schreiben
+// passieren, z. B. wenn das Tablet während des Speicherns in Standby geht).
+function readLocalEinsatz(einsatznummer) {
+  try {
+    const raw = localStorage.getItem(`einsatz_${einsatznummer}`);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch (err) {
+    console.warn(`Lokaler Einsatz ${einsatznummer} unleserlich, wird verworfen:`, err);
+    try {
+      localStorage.removeItem(`einsatz_${einsatznummer}`);
+    } catch (_) { /* ignorieren */ }
+    return null;
+  }
+}
+
+// Schreiben in localStorage – fängt QuotaExceededError (häufig auf Android-WebView,
+// wenn mehrere Einsätze mit Signatur-DataURLs zusammen das ~5-MB-Limit sprengen).
+function writeLocalEinsatz(einsatznummer, data) {
+  try {
+    localStorage.setItem(`einsatz_${einsatznummer}`, JSON.stringify(data));
+    return true;
+  } catch (err) {
+    console.error('localStorage konnte Einsatz nicht speichern:', err);
+    showSaveNotification('⚠ Lokaler Speicher voll – bitte alte Einsätze entfernen', true);
+    return false;
+  }
+}
+
 // XSS-Schutz: HTML-Escape Funktion
 function escapeHtml(unsafe) {
     if (unsafe === null || unsafe === undefined) return '';
@@ -98,40 +128,39 @@ async function loadEinsatzDaten() {
   
   try {
     const response = await fetch(`${SERVER_URL}/einsatz/${einsatznummer}`);
-    
+
     if (!response.ok) {
-      const localData = localStorage.getItem(`einsatz_${einsatznummer}`);
+      const localData = readLocalEinsatz(einsatznummer);
       if (localData) {
-        const data = JSON.parse(localData);
-        applyEinsatzData(data);
+        applyEinsatzData(localData);
       } else {
         initializeNewEinsatz(einsatznummer, params);
       }
       return;
     }
-    
+
     const data = await response.json();
-    
+
     if (!data.einsatz || (!data.fahrzeuge.length && !data.besatzungen.length)) {
-      const localData = localStorage.getItem(`einsatz_${einsatznummer}`);
+      const localData = readLocalEinsatz(einsatznummer);
       if (localData) {
-        applyEinsatzData(JSON.parse(localData));
+        applyEinsatzData(localData);
       } else {
         initializeNewEinsatz(einsatznummer, params);
       }
       return;
     }
-    
+
     applyEinsatzData(data);
-    
+
     // Nur PDF-Versionen laden wenn bereits welche existieren
     loadPDFVersions(currentEinsatzId);
-    
+
   } catch (error) {
     console.error('Fehler beim Laden:', error);
-    const localData = localStorage.getItem(`einsatz_${einsatznummer}`);
+    const localData = readLocalEinsatz(einsatznummer);
     if (localData) {
-      applyEinsatzData(JSON.parse(localData));
+      applyEinsatzData(localData);
     } else {
       alert('Fehler beim Laden der Daten.');
       window.location.href = 'input_doku.html';
@@ -246,11 +275,17 @@ function createFahrzeugSection(fahrzeugTyp) {
     nameInput.placeholder = "Name eingeben";
     nameInput.value = member.name;
     nameInput.autocomplete = "off";
-    nameInput.addEventListener("change", (e) => {
+    // 'input' triggert bei jedem Tastendruck (wichtig auf Android: 'change' feuert
+    // erst beim Verlassen des Felds – wenn der User die App in den Hintergrund
+    // schiebt oder das Tablet rotiert, ohne zu blurren, sind die Daten sonst weg).
+    // 'change' bleibt als Fallback für Autofill/Programm-Setzen.
+    const onNameChange = (e) => {
       besatzungen[fahrzeugTyp][index].name = e.target.value;
       saveDataLocal();
       triggerAutoSave();
-    });
+    };
+    nameInput.addEventListener("input", onNameChange);
+    nameInput.addEventListener("change", onNameChange);
     nameCell.appendChild(nameInput);
     row.appendChild(nameCell);
     autocomplete(nameInput, namensListe);
@@ -299,11 +334,15 @@ function createFahrzeugSection(fahrzeugTyp) {
     paInput.style.marginTop = "5px";
     paInput.style.display = member.pa ? "block" : "none";
     paInput.value = member.paMinuten;
-    paInput.addEventListener("change", (e) => {
+    // Siehe Name-Input: 'input' deckt Android-Fall ab, dass der User das Feld
+    // nicht verlässt, bevor er die App wechselt oder das Tablet sperrt.
+    const onPaChange = (e) => {
       besatzungen[fahrzeugTyp][index].paMinuten = e.target.value;
       saveDataLocal();
       triggerAutoSave();
-    });
+    };
+    paInput.addEventListener("input", onPaChange);
+    paInput.addEventListener("change", onPaChange);
     paInput.addEventListener("blur", (e) => {
       const checkbox = paCell.querySelector('input[type="checkbox"]');
       if (checkbox.checked && (e.target.value === '' || e.target.value === null)) {
@@ -394,7 +433,7 @@ function saveDataLocal() {
     });
   });
   
-  localStorage.setItem(`einsatz_${currentEinsatzId}`, JSON.stringify(dataToSave));
+  writeLocalEinsatz(currentEinsatzId, dataToSave);
 }
 
 // Hauptfunktion: Speichern der Daten
@@ -861,25 +900,42 @@ function clearSignature() {
 }
 
 function saveSignature() {
-  if (signaturePad.isEmpty()) {
+  if (!signaturePad || signaturePad.isEmpty()) {
     alert("Bitte unterschreiben Sie zuerst.");
     return;
   }
-  
-  const dataURL = signaturePad.toDataURL();
-  besatzungen[currentFahrzeug][currentPosition].signature = dataURL;
-  
-  const signatureImg = document.getElementById(`signature-img-${currentFahrzeug}-${currentPosition}`);
-  signatureImg.src = dataURL;
-  signatureImg.classList.remove("hidden");
-  signatureImg.style.display = "block";
-  
-  const signButton = currentRow.querySelector("button");
-  signButton.textContent = "Neu unterschreiben";
 
-  saveDataLocal();
-  triggerAutoSave();
-  closeSignatureModal();
+  // Modal in try/finally schließen – falls beim UI-Update eine Referenz null ist
+  // (z. B. weil zwischenzeitlich updateFahrzeugTables() lief), darf das Modal
+  // nicht auf dem Tablet hängen bleiben.
+  try {
+    const dataURL = signaturePad.toDataURL();
+    besatzungen[currentFahrzeug][currentPosition].signature = dataURL;
+
+    const signatureImg = document.getElementById(
+      `signature-img-${currentFahrzeug}-${currentPosition}`
+    );
+    if (signatureImg) {
+      signatureImg.src = dataURL;
+      signatureImg.classList.remove("hidden");
+      signatureImg.style.display = "block";
+    }
+
+    if (currentRow) {
+      const signButton = currentRow.querySelector("button");
+      if (signButton) {
+        signButton.textContent = "Neu unterschreiben";
+      }
+    }
+
+    saveDataLocal();
+    triggerAutoSave();
+  } catch (err) {
+    console.error('Fehler beim Speichern der Unterschrift:', err);
+    alert('Unterschrift konnte nicht übernommen werden. Bitte erneut versuchen.');
+  } finally {
+    closeSignatureModal();
+  }
 }
 
 function initSignaturePad() {
