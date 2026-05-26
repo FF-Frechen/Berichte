@@ -768,19 +768,46 @@ async function sendCurrentVersion() {
 }
 
 // Autocomplete-Funktionalität
+//
+// Positions-Logik: Auf Android-Tablets im Hochkantmodus überdeckt die Soft-Tastatur
+// häufig den Bereich unter dem aktiven Input – das Dropdown wäre dort unsichtbar.
+// positionAutocompleteList() misst per visualViewport, wieviel Platz unter dem
+// Input noch da ist. Wenn weniger als die Listenhöhe (oder mind. 120 px) frei
+// sind, wird die Liste über dem Input geöffnet (Klasse 'above').
+function positionAutocompleteList(input, list) {
+  if (!input || !list) return;
+
+  const inputRect = input.getBoundingClientRect();
+  const vv = window.visualViewport;
+  const viewportHeight = vv ? vv.height : window.innerHeight;
+  const viewportTop = vv ? vv.offsetTop : 0;
+
+  const spaceBelow = (viewportTop + viewportHeight) - inputRect.bottom;
+  const spaceAbove = inputRect.top - viewportTop;
+  const listHeight = Math.min(list.scrollHeight || 200, 200);
+
+  // Wenn unter dem Input zu wenig Platz ist UND über dem Input mehr Platz wäre,
+  // klappen wir nach oben auf.
+  if (spaceBelow < Math.max(listHeight, 120) && spaceAbove > spaceBelow) {
+    list.classList.add('above');
+  } else {
+    list.classList.remove('above');
+  }
+}
+
 function autocomplete(inp, arr) {
   let currentFocus;
-  
+
   inp.addEventListener("input", function(e) {
     const val = this.value;
     closeAllLists();
     if (!val) return false;
     currentFocus = -1;
-    
+
     const autocompleteList = document.createElement("div");
     autocompleteList.setAttribute("class", "autocomplete-items");
     this.parentNode.appendChild(autocompleteList);
-    
+
     for (let i = 0; i < arr.length; i++) {
       if (arr[i].toLowerCase().includes(val.toLowerCase())) {
         const item = document.createElement("div");
@@ -806,11 +833,31 @@ function autocomplete(inp, arr) {
           inp.dispatchEvent(event);
           closeAllLists();
         });
-        
+
         autocompleteList.appendChild(item);
       }
     }
+
+    // Erst nach dem Befüllen positionieren – sonst kennt scrollHeight die Höhe nicht.
+    // requestAnimationFrame wartet auf den nächsten Layout-Pass, damit
+    // getBoundingClientRect die aktualisierten Werte zurückgibt (wichtig auf
+    // Android, wo der visualViewport beim Öffnen der Tastatur asynchron schrumpft).
+    requestAnimationFrame(() => positionAutocompleteList(inp, autocompleteList));
   });
+
+  // Wenn die Tastatur sich öffnet/schließt, schrumpft visualViewport.
+  // Das aktive Dropdown unter diesem Input dann neu positionieren.
+  if (window.visualViewport && !window._autocompleteVvBound) {
+    window._autocompleteVvBound = true;
+    const reposition = () => {
+      const active = document.activeElement;
+      if (!active || !active.parentNode) return;
+      const list = active.parentNode.querySelector('.autocomplete-items');
+      if (list) positionAutocompleteList(active, list);
+    };
+    window.visualViewport.addEventListener('resize', reposition);
+    window.visualViewport.addEventListener('scroll', reposition);
+  }
   
   inp.addEventListener("keydown", function(e) {
     let x = this.parentNode.querySelector(".autocomplete-items");
