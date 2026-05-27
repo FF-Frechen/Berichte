@@ -107,37 +107,41 @@ function purgeOtherLocalEinsaetze(keepEinsatznummer) {
   }
 }
 
-// Prophylaktisches Aufräumen beim Seitenstart: Einträge älter als KEEP_DAYS Tage
-// löschen. Läuft bevor loadEinsatzDaten() aufgerufen wird, damit beim ersten
-// Speicherversuch schon genug Platz da ist.
-const LOCAL_KEEP_DAYS = 14;
+// Beim Seitenstart nur die letzten LOCAL_KEEP_COUNT Einsätze behalten.
+// Alle anderen werden entfernt – der Server ist die eigentliche Quelle,
+// localStorage ist nur ein schneller Puffer für die zuletzt geöffneten Einträge.
+const LOCAL_KEEP_COUNT = 5;
 function cleanupOldLocalEinsaetze() {
-  const cutoff = Date.now() - LOCAL_KEEP_DAYS * 24 * 60 * 60 * 1000;
-  const toRemove = [];
+  const entries = [];
   for (let i = 0; i < localStorage.length; i++) {
     const k = localStorage.key(i);
     if (!k || !k.startsWith('einsatz_')) continue;
     try {
       const raw = localStorage.getItem(k);
-      if (!raw) continue;
+      if (!raw) { localStorage.removeItem(k); continue; }
       const obj = JSON.parse(raw);
-      // Datum aus dem gespeicherten Einsatz auslesen (Format: DD.MM.YYYY)
+      // Datum aus dem gespeicherten Einsatz lesen (Format: DD.MM.YYYY)
       const datumStr = obj && obj.einsatz && obj.einsatz.datum;
+      let ts = 0;
       if (datumStr) {
         const parts = datumStr.split('.');
         if (parts.length === 3) {
-          const ts = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`).getTime();
-          if (!isNaN(ts) && ts < cutoff) toRemove.push(k);
+          ts = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`).getTime() || 0;
         }
       }
+      entries.push({ key: k, ts });
     } catch (_) {
-      // Kaputten Eintrag gleich mitentfernen
-      toRemove.push(k);
+      // Kaputten Eintrag direkt entfernen
+      try { localStorage.removeItem(k); } catch (_) {}
     }
   }
-  toRemove.forEach(k => { try { localStorage.removeItem(k); } catch (_) {} });
+
+  // Neueste zuerst sortieren, alles ab Platz LOCAL_KEEP_COUNT entfernen
+  entries.sort((a, b) => b.ts - a.ts);
+  const toRemove = entries.slice(LOCAL_KEEP_COUNT);
+  toRemove.forEach(e => { try { localStorage.removeItem(e.key); } catch (_) {} });
   if (toRemove.length > 0) {
-    console.log(`Aufräumen: ${toRemove.length} lokale Einsätze älter als ${LOCAL_KEEP_DAYS} Tage entfernt`);
+    console.log(`Aufräumen: ${toRemove.length} alte lokale Einsätze entfernt, ${Math.min(entries.length, LOCAL_KEEP_COUNT)} behalten`);
   }
 }
 
