@@ -31,16 +31,113 @@ function readLocalEinsatz(einsatznummer) {
   }
 }
 
-// Schreiben in localStorage – fängt QuotaExceededError (häufig auf Android-WebView,
-// wenn mehrere Einsätze mit Signatur-DataURLs zusammen das ~5-MB-Limit sprengen).
+// Schreiben in localStorage – mehrstufige Strategie gegen QuotaExceededError.
+// Android-WebView hat oft nur ~5 MB. Signaturen als DataURLs sind je ~50-150 KB,
+// mehrere Einsätze füllen das schnell.
+//
+// Stufe 1: direkt speichern
+// Stufe 2: alle anderen einsatz_*-Einträge löschen, nochmal versuchen
+// Stufe 3: ohne Signaturen speichern (die liegen bereits auf dem Server)
 function writeLocalEinsatz(einsatznummer, data) {
+  const key = `einsatz_${einsatznummer}`;
+  const serialized = JSON.stringify(data);
+
+  // Stufe 1: direkt
   try {
-    localStorage.setItem(`einsatz_${einsatznummer}`, JSON.stringify(data));
+    localStorage.setItem(key, serialized);
     return true;
-  } catch (err) {
-    console.error('localStorage konnte Einsatz nicht speichern:', err);
-    showSaveNotification('⚠ Lokaler Speicher voll – bitte alte Einsätze entfernen', true);
+  } catch (e) {
+    if (!isQuotaError(e)) {
+      console.error('localStorage Fehler:', e);
+      return false;
+    }
+  }
+
+  // Stufe 2: alle anderen einsatz_*-Einträge löschen, dann nochmal
+  console.warn('localStorage voll – räume alte Einsätze auf');
+  purgeOtherLocalEinsaetze(einsatznummer);
+  try {
+    localStorage.setItem(key, serialized);
+    return true;
+  } catch (e) {
+    if (!isQuotaError(e)) {
+      console.error('localStorage Fehler nach Aufräumen:', e);
+      return false;
+    }
+  }
+
+  // Stufe 3: ohne Signaturen speichern – Signaturen sind bereits auf dem Server,
+  // der lokale Fallback-Eintrag braucht sie nicht zwingend.
+  console.warn('Immer noch voll – speichere ohne Signaturen');
+  const withoutSigs = {
+    ...data,
+    besatzungen: (data.besatzungen || []).map(b => ({ ...b, signature: '' }))
+  };
+  try {
+    localStorage.setItem(key, JSON.stringify(withoutSigs));
+    showSaveNotification('⚠ Lokaler Speicher fast voll – Signaturen nur auf Server', true);
+    return true;
+  } catch (e) {
+    console.error('localStorage auch ohne Signaturen voll:', e);
+    showSaveNotification('⚠ Lokaler Speicher voll – bitte Browser-Daten löschen', true);
     return false;
+  }
+}
+
+function isQuotaError(e) {
+  return e && (
+    e.name === 'QuotaExceededError' ||
+    e.name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
+    e.code === 22 || e.code === 1014
+  );
+}
+
+// Löscht alle einsatz_*-Einträge außer dem aktuellen.
+function purgeOtherLocalEinsaetze(keepEinsatznummer) {
+  const toRemove = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && k.startsWith('einsatz_') && k !== `einsatz_${keepEinsatznummer}`) {
+      toRemove.push(k);
+    }
+  }
+  toRemove.forEach(k => { try { localStorage.removeItem(k); } catch (_) {} });
+  if (toRemove.length > 0) {
+    console.log(`${toRemove.length} alte lokale Einsätze entfernt`);
+  }
+}
+
+// Prophylaktisches Aufräumen beim Seitenstart: Einträge älter als KEEP_DAYS Tage
+// löschen. Läuft bevor loadEinsatzDaten() aufgerufen wird, damit beim ersten
+// Speicherversuch schon genug Platz da ist.
+const LOCAL_KEEP_DAYS = 14;
+function cleanupOldLocalEinsaetze() {
+  const cutoff = Date.now() - LOCAL_KEEP_DAYS * 24 * 60 * 60 * 1000;
+  const toRemove = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (!k || !k.startsWith('einsatz_')) continue;
+    try {
+      const raw = localStorage.getItem(k);
+      if (!raw) continue;
+      const obj = JSON.parse(raw);
+      // Datum aus dem gespeicherten Einsatz auslesen (Format: DD.MM.YYYY)
+      const datumStr = obj && obj.einsatz && obj.einsatz.datum;
+      if (datumStr) {
+        const parts = datumStr.split('.');
+        if (parts.length === 3) {
+          const ts = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`).getTime();
+          if (!isNaN(ts) && ts < cutoff) toRemove.push(k);
+        }
+      }
+    } catch (_) {
+      // Kaputten Eintrag gleich mitentfernen
+      toRemove.push(k);
+    }
+  }
+  toRemove.forEach(k => { try { localStorage.removeItem(k); } catch (_) {} });
+  if (toRemove.length > 0) {
+    console.log(`Aufräumen: ${toRemove.length} lokale Einsätze älter als ${LOCAL_KEEP_DAYS} Tage entfernt`);
   }
 }
 
@@ -1076,6 +1173,10 @@ function updateFahrzeugCheckboxes() {
 
 // Initialisierung beim Laden der Seite
 document.addEventListener("DOMContentLoaded", async function() {
+  // Zuerst alten localStorage-Ballast wegräumen, damit beim ersten Speichern
+  // genug Platz da ist (wichtig auf Android-Tablets mit ~5 MB Quota).
+  cleanupOldLocalEinsaetze();
+
   initSignaturePad();
 
   // Lade zuerst die Fahrzeuge, dann Namen, dann Einsatzdaten
