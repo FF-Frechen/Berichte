@@ -309,6 +309,31 @@ async function sendBerichtMail(pdf, { automatic = false } = {}) {
     return { info, recipients };
 }
 
+// Atomarer "Claim" vor dem Versand: setzt email_sent=1 nur, wenn die Version
+// noch nicht versendet ist. Verhindert Mehrfachversand, wenn manueller Versand
+// und automatischer Versand (oder zwei schnelle Klicks) gleichzeitig laufen.
+// Liefert true, wenn DIESER Aufrufer die Version beanspruchen konnte.
+function claimPdfForSending(id, automatic) {
+    return new Promise((resolve, reject) => {
+        db.run(
+            'UPDATE pdfs SET email_sent = 1, auto_sent = ? WHERE id = ? AND email_sent = 0',
+            [automatic ? 1 : 0, id],
+            function (err) {
+                if (err) return reject(err);
+                resolve(this.changes > 0);
+            }
+        );
+    });
+}
+
+// Macht den Claim rückgängig, falls der Versand danach fehlschlägt – damit die
+// Version weiterhin (manuell oder automatisch) versendet werden kann.
+function releasePdfClaim(id) {
+    return new Promise((resolve) => {
+        db.run('UPDATE pdfs SET email_sent = 0, auto_sent = 0 WHERE id = ?', [id], () => resolve());
+    });
+}
+
 // Läuft regelmäßig und nicht überlappend. Findet je Einsatz die jüngste,
 // noch nicht versendete PDF-Version, deren Speicherung älter als
 // AUTO_SEND_HOURS ist, und verschickt sie automatisch.
@@ -342,14 +367,22 @@ function runAutoSendCheck() {
         }
 
         for (const pdf of rows) {
+            // Version atomar beanspruchen. Schlägt das fehl (changes=0), wurde sie
+            // zwischenzeitlich bereits manuell versendet -> überspringen.
+            let claimed = false;
+            try {
+                claimed = await claimPdfForSending(pdf.id, true);
+            } catch (claimErr) {
+                console.error(`[AUTO-SEND] Claim für ${pdf.einsatznummer} V${pdf.version} fehlgeschlagen:`, claimErr.message);
+                continue;
+            }
+            if (!claimed) {
+                console.log(`[AUTO-SEND] ${pdf.einsatznummer} V${pdf.version} wurde bereits versendet – übersprungen.`);
+                continue;
+            }
+
             try {
                 const { info, recipients } = await sendBerichtMail(pdf, { automatic: true });
-                await new Promise((resolve) => {
-                    db.run('UPDATE pdfs SET email_sent = 1, auto_sent = 1 WHERE id = ?', [pdf.id], (uErr) => {
-                        if (uErr) console.error('[AUTO-SEND] Fehler beim Markieren der PDF:', uErr.message);
-                        resolve();
-                    });
-                });
                 console.log(`[AUTO-SEND] ✓ Bericht ${pdf.einsatznummer} V${pdf.version} automatisch an ${recipients.length} Empfänger versendet (Message-ID ${info.messageId}).`);
                 debugLogPush({
                     level: 'info',
@@ -360,6 +393,9 @@ function runAutoSendCheck() {
                     messageId: info.messageId
                 });
             } catch (e) {
+                // Versand fehlgeschlagen -> Claim zurücknehmen, damit die Version
+                // beim nächsten Lauf erneut versendet werden kann.
+                await releasePdfClaim(pdf.id);
                 console.error(`[AUTO-SEND] ✗ Fehler beim automatischen Versand von ${pdf.einsatznummer} V${pdf.version}:`, e.message);
                 debugLogPush({
                     level: 'error',
@@ -1191,6 +1227,20 @@ app.post('/api/pdf/email', async (req, res) => {
             return res.status(404).json({ error: 'PDF-Datei existiert nicht auf dem Server' });
         }
 
+        // Version atomar beanspruchen (verhindert Mehrfachversand bei zwei
+        // gleichzeitigen Klicks oder gleichzeitigem Auto-Versand).
+        let claimed = false;
+        try {
+            claimed = await claimPdfForSending(pdfId, false);
+        } catch (claimErr) {
+            console.error('[EMAIL] Fehler beim Beanspruchen der PDF:', claimErr.message);
+            return res.status(500).json({ error: 'Fehler beim E-Mail-Versand: ' + claimErr.message });
+        }
+        if (!claimed) {
+            console.warn('[EMAIL] PDF wurde zwischenzeitlich bereits versendet');
+            return res.status(400).json({ error: 'Diese PDF wurde bereits per E-Mail versendet.' });
+        }
+
         try {
             console.log('[EMAIL] Sende E-Mail (manuell)...');
             console.log('[EMAIL] Von:', SMTP_CONFIG.auth.user);
@@ -1202,22 +1252,16 @@ app.post('/api/pdf/email', async (req, res) => {
             console.log('[EMAIL] ✓ E-Mail erfolgreich versendet!');
             console.log('[EMAIL] Message ID:', info.messageId);
             console.log('[EMAIL] Response:', info.response);
-            
-            // Markiere als versendet
-            db.run('UPDATE pdfs SET email_sent = 1 WHERE id = ?', [pdfId], (err) => {
-                if (err) {
-                    console.error('[EMAIL] Fehler beim Markieren der PDF:', err);
-                } else {
-                    console.log('[EMAIL] PDF als versendet markiert');
-                }
-            });
-            
-            res.json({ 
+            console.log('[EMAIL] PDF als versendet markiert');
+
+            res.json({
                 message: 'E-Mail erfolgreich versendet',
                 recipients: recipients.length,
                 messageId: info.messageId
             });
         } catch (error) {
+            // Versand fehlgeschlagen -> Claim zurücknehmen, damit erneut versendet werden kann.
+            await releasePdfClaim(pdfId);
             console.error('[EMAIL] ===== FEHLER beim E-Mail-Versand =====');
             console.error('[EMAIL] Error Name:', error.name);
             console.error('[EMAIL] Error Message:', error.message);
