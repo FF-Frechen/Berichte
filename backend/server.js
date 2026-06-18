@@ -12,9 +12,72 @@ const multer = require('multer');
 const app = express();
 const PORT = 3000;
 
+// === In-Memory Debug-Log (ephemeral) ===
+// Ring-Buffer mit den letzten N Log-Einträgen. Geht beim Restart verloren – das
+// ist Absicht: hilft beim Eingrenzen von Tablet-/Android-Problemen, ohne dass
+// PII / Signatur-DataURLs irgendwo persistent landen.
+const DEBUG_LOG_MAX = parseInt(process.env.DEBUG_LOG_MAX) || 2000;
+const debugLog = [];
+
+function debugLogPush(entry) {
+    const e = { ts: new Date().toISOString(), ...entry };
+    debugLog.push(e);
+    if (debugLog.length > DEBUG_LOG_MAX) {
+        debugLog.splice(0, debugLog.length - DEBUG_LOG_MAX);
+    }
+    return e;
+}
+
+// Hilfsfunktion: User-Agent grob klassifizieren – sehen, ob Android-Tablet,
+// iOS, Desktop. Spart manuelles UA-Parsing beim Lesen der Logs.
+function classifyUserAgent(ua) {
+    if (!ua) return 'unknown';
+    if (/Android/i.test(ua)) {
+        return /Mobile/i.test(ua) ? 'android-phone' : 'android-tablet';
+    }
+    if (/iPad/i.test(ua)) return 'ipad';
+    if (/iPhone/i.test(ua)) return 'iphone';
+    if (/Windows|Macintosh|Linux/i.test(ua)) return 'desktop';
+    return 'other';
+}
+
+// Globale Error-Handler – damit ein abstürzender Promise nicht spurlos verloren geht.
+process.on('uncaughtException', (err) => {
+    debugLogPush({ level: 'fatal', type: 'uncaughtException', msg: err.message, stack: err.stack });
+    console.error('[FATAL] uncaughtException:', err);
+});
+process.on('unhandledRejection', (reason) => {
+    const msg = reason instanceof Error ? reason.message : String(reason);
+    const stack = reason instanceof Error ? reason.stack : undefined;
+    debugLogPush({ level: 'error', type: 'unhandledRejection', msg, stack });
+    console.error('[ERROR] unhandledRejection:', reason);
+});
+
 // Middleware
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
+
+// Request-Logger Middleware – läuft NACH express.json, damit wir auch die
+// geparste Body-Größe kennen, aber vor allen Routen.
+app.use((req, res, next) => {
+    const start = Date.now();
+    res.on('finish', () => {
+        const entry = {
+            level: res.statusCode >= 500 ? 'error' : res.statusCode >= 400 ? 'warn' : 'info',
+            type: 'http',
+            method: req.method,
+            path: req.path,
+            status: res.statusCode,
+            durationMs: Date.now() - start,
+            ip: req.headers['x-forwarded-for'] || req.socket.remoteAddress,
+            ua: req.headers['user-agent'],
+            device: classifyUserAgent(req.headers['user-agent']),
+            reqBytes: parseInt(req.headers['content-length']) || 0
+        };
+        debugLogPush(entry);
+    });
+    next();
+});
 
 // Multer für File-Uploads
 const upload = multer({ storage: multer.memoryStorage() });
@@ -611,6 +674,35 @@ app.get('/api/einsatz/:einsatznummer', (req, res) => {
 // Einsatzdaten speichern/updaten (POST)
 app.post('/api/einsatz', (req, res) => {
     const { einsatznummer, fahrzeuge, besatzungen, ...einsatzData } = req.body;
+
+    // Detail-Log für Einsatz-Saves – hilft beim Eingrenzen von Unterschrifts-
+    // Problemen auf dem Tablet. Wir loggen Signatur-Größen pro Person (nicht den
+    // Inhalt!), damit man sieht ob die Daten überhaupt am Server ankommen.
+    try {
+        const sigStats = (besatzungen || []).map(b => ({
+            fz: b.fahrzeug,
+            pos: b.position,
+            name: (b.name || '').slice(0, 40),
+            sigBytes: b.signature ? String(b.signature).length : 0,
+            pa: !!b.pa
+        }));
+        const totalSigBytes = sigStats.reduce((sum, s) => sum + s.sigBytes, 0);
+        debugLogPush({
+            level: 'info',
+            type: 'einsatz-save',
+            einsatznummer,
+            device: classifyUserAgent(req.headers['user-agent']),
+            ip: req.headers['x-forwarded-for'] || req.socket.remoteAddress,
+            fahrzeugeCount: (fahrzeuge || []).length,
+            besatzungCount: sigStats.length,
+            signatureCount: sigStats.filter(s => s.sigBytes > 0).length,
+            totalSigBytes,
+            members: sigStats
+        });
+    } catch (logErr) {
+        // Logging darf den Save-Pfad niemals brechen.
+        console.error('debugLog für einsatz-save fehlgeschlagen:', logErr);
+    }
 
     const dbData = {
         einsatznummer: einsatznummer,
@@ -1502,6 +1594,106 @@ app.get('/api/health', (req, res) => {
         status: 'ok',
         timestamp: new Date().toISOString()
     });
+});
+
+// === Debug-Endpoints ===
+// Zugriff geschützt mit DELETE_PASSWORD (gleiches Admin-Geheimnis wie für
+// PDF-Löschen). Token entweder als ?token=... oder Header X-Debug-Token.
+// Logs sind in-memory, gehen beim Container-Restart verloren.
+function checkDebugAuth(req) {
+    const provided = req.query.token || req.headers['x-debug-token'] || '';
+    if (!provided) return false;
+    const providedHash = crypto.createHash('sha256').update(String(provided)).digest('hex');
+    // Konstantzeit-Vergleich, damit kein Timing-Leak
+    if (providedHash.length !== DELETE_PASSWORD_HASH.length) return false;
+    return crypto.timingSafeEqual(
+        Buffer.from(providedHash, 'hex'),
+        Buffer.from(DELETE_PASSWORD_HASH, 'hex')
+    );
+}
+
+app.get('/api/debug/logs', (req, res) => {
+    if (!checkDebugAuth(req)) {
+        return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    // Filter-Optionen
+    const limit = Math.min(parseInt(req.query.limit) || DEBUG_LOG_MAX, DEBUG_LOG_MAX);
+    const level = req.query.level; // info|warn|error|fatal
+    const type = req.query.type;   // http|einsatz-save|uncaughtException|...
+    const device = req.query.device; // android-tablet|desktop|...
+    const path_q = req.query.path;
+    const since = req.query.since ? new Date(req.query.since).getTime() : null;
+
+    let entries = debugLog;
+    if (level) entries = entries.filter(e => e.level === level);
+    if (type) entries = entries.filter(e => e.type === type);
+    if (device) entries = entries.filter(e => e.device === device);
+    if (path_q) entries = entries.filter(e => e.path && e.path.includes(path_q));
+    if (since && !isNaN(since)) entries = entries.filter(e => new Date(e.ts).getTime() >= since);
+
+    // Neueste zuerst, dann limit
+    const result = entries.slice(-limit).reverse();
+
+    if (req.query.format === 'text') {
+        res.set('Content-Type', 'text/plain; charset=utf-8');
+        const lines = result.map(e => {
+            const base = `${e.ts} [${e.level || 'info'}] ${e.type}`;
+            if (e.type === 'http') {
+                return `${base} ${e.method} ${e.path} → ${e.status} (${e.durationMs}ms) ${e.device} ${e.reqBytes}B`;
+            }
+            if (e.type === 'einsatz-save') {
+                return `${base} einsatz=${e.einsatznummer} dev=${e.device} sigs=${e.signatureCount}/${e.besatzungCount} totalSigBytes=${e.totalSigBytes}`;
+            }
+            return `${base} ${JSON.stringify(e)}`;
+        });
+        return res.send(lines.join('\n') + '\n');
+    }
+
+    res.json({
+        total: debugLog.length,
+        returned: result.length,
+        bufferMax: DEBUG_LOG_MAX,
+        entries: result
+    });
+});
+
+// Buffer leeren (nützlich vor einem Reproduktions-Versuch auf dem Tablet)
+app.post('/api/debug/logs/clear', (req, res) => {
+    if (!checkDebugAuth(req)) {
+        return res.status(401).json({ error: 'Unauthorized' });
+    }
+    const cleared = debugLog.length;
+    debugLog.length = 0;
+    debugLogPush({ level: 'info', type: 'debug-clear', cleared });
+    res.json({ cleared });
+});
+
+// Statistik-Übersicht – schneller Blick auf Verteilung der letzten Requests
+app.get('/api/debug/stats', (req, res) => {
+    if (!checkDebugAuth(req)) {
+        return res.status(401).json({ error: 'Unauthorized' });
+    }
+    const stats = {
+        bufferSize: debugLog.length,
+        bufferMax: DEBUG_LOG_MAX,
+        byLevel: {},
+        byDevice: {},
+        byStatus: {},
+        slowRequests: []
+    };
+    debugLog.forEach(e => {
+        if (e.level) stats.byLevel[e.level] = (stats.byLevel[e.level] || 0) + 1;
+        if (e.device) stats.byDevice[e.device] = (stats.byDevice[e.device] || 0) + 1;
+        if (e.status) stats.byStatus[e.status] = (stats.byStatus[e.status] || 0) + 1;
+        if (e.type === 'http' && e.durationMs > 1000) {
+            stats.slowRequests.push({
+                ts: e.ts, method: e.method, path: e.path, durationMs: e.durationMs, device: e.device
+            });
+        }
+    });
+    stats.slowRequests = stats.slowRequests.slice(-20);
+    res.json(stats);
 });
 
 // Static files für client.js und andere Assets

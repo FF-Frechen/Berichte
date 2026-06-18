@@ -30,10 +30,7 @@ class SignaturePad {
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
     // Stift-Einstellungen
-    this.ctx.strokeStyle = this.options.penColor;
-    this.ctx.lineWidth = (this.options.minWidth + this.options.maxWidth) / 2;
-    this.ctx.lineCap = 'round';
-    this.ctx.lineJoin = 'round';
+    this._applyPenStyle();
   }
 
   _attachEventListeners() {
@@ -46,7 +43,15 @@ class SignaturePad {
     // Touch events für mobile Geräte
     this.canvas.addEventListener('touchstart', this._handleTouchStart.bind(this), { passive: false });
     this.canvas.addEventListener('touchmove', this._handleTouchMove.bind(this), { passive: false });
-    this.canvas.addEventListener('touchend', this._handleTouchEnd.bind(this));
+    this.canvas.addEventListener('touchend', this._handleTouchEnd.bind(this), { passive: false });
+    this.canvas.addEventListener('touchcancel', this._handleTouchEnd.bind(this), { passive: false });
+  }
+
+  _applyPenStyle() {
+    this.ctx.strokeStyle = this.options.penColor;
+    this.ctx.lineWidth = (this.options.minWidth + this.options.maxWidth) / 2;
+    this.ctx.lineCap = 'round';
+    this.ctx.lineJoin = 'round';
   }
 
   _getMousePos(e) {
@@ -134,12 +139,52 @@ class SignaturePad {
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     this.ctx.fillStyle = this.options.backgroundColor;
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    // Stift-Stil nach Resize/Reset wiederherstellen, sonst zeichnet der nächste
+    // Strich mit Default-Werten (dünn, kantig).
+    this._applyPenStyle();
     this._isEmpty = true;
     this.strokes = [];
   }
 
   toDataURL(type = 'image/png') {
     return this.canvas.toDataURL(type);
+  }
+
+  fromDataURL(dataURL) {
+    // Lädt eine gespeicherte Unterschrift als Bild ins Canvas zurück.
+    // Kompatibel zur signature_pad-Library-API.
+    return new Promise((resolve, reject) => {
+      if (!dataURL) {
+        this.clear();
+        resolve();
+        return;
+      }
+
+      const image = new Image();
+      image.onload = () => {
+        this.clear();
+        // clear() setzt _isEmpty=true und leert strokes – wir markieren das Pad
+        // wieder als nicht leer, damit saveSignature() nicht abbricht.
+        this._isEmpty = false;
+        this.ctx.drawImage(
+          image,
+          0,
+          0,
+          this.canvas.width,
+          this.canvas.height
+        );
+        // Stift-Stil nach drawImage wiederherstellen für nachfolgende Striche
+        this._applyPenStyle();
+        resolve();
+      };
+      image.onerror = (err) => {
+        // Fehler beim Laden nicht eskalieren – Modal bleibt nutzbar, Pad bleibt leer.
+        console.warn('SignaturePad.fromDataURL: Bild konnte nicht geladen werden', err);
+        this.clear();
+        resolve();
+      };
+      image.src = dataURL;
+    });
   }
 
   isEmpty() {

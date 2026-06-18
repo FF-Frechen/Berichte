@@ -14,6 +14,137 @@ let isSaving = false;
 
 const SERVER_URL = '/api';
 
+// Robustes Lesen aus localStorage – korrupte/abgebrochene Einträge dürfen die App
+// nicht crashen lassen (kann auf Android-WebView nach unterbrochenem Schreiben
+// passieren, z. B. wenn das Tablet während des Speicherns in Standby geht).
+function readLocalEinsatz(einsatznummer) {
+  try {
+    const raw = localStorage.getItem(`einsatz_${einsatznummer}`);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch (err) {
+    console.warn(`Lokaler Einsatz ${einsatznummer} unleserlich, wird verworfen:`, err);
+    try {
+      localStorage.removeItem(`einsatz_${einsatznummer}`);
+    } catch (_) { /* ignorieren */ }
+    return null;
+  }
+}
+
+// Schreiben in localStorage – mehrstufige Strategie gegen QuotaExceededError.
+// Android-WebView hat oft nur ~5 MB. Signaturen als DataURLs sind je ~50-150 KB,
+// mehrere Einsätze füllen das schnell.
+//
+// Stufe 1: direkt speichern
+// Stufe 2: alle anderen einsatz_*-Einträge löschen, nochmal versuchen
+// Stufe 3: ohne Signaturen speichern (die liegen bereits auf dem Server)
+function writeLocalEinsatz(einsatznummer, data) {
+  const key = `einsatz_${einsatznummer}`;
+  const serialized = JSON.stringify(data);
+
+  // Stufe 1: direkt
+  try {
+    localStorage.setItem(key, serialized);
+    return true;
+  } catch (e) {
+    if (!isQuotaError(e)) {
+      console.error('localStorage Fehler:', e);
+      return false;
+    }
+  }
+
+  // Stufe 2: alle anderen einsatz_*-Einträge löschen, dann nochmal
+  console.warn('localStorage voll – räume alte Einsätze auf');
+  purgeOtherLocalEinsaetze(einsatznummer);
+  try {
+    localStorage.setItem(key, serialized);
+    return true;
+  } catch (e) {
+    if (!isQuotaError(e)) {
+      console.error('localStorage Fehler nach Aufräumen:', e);
+      return false;
+    }
+  }
+
+  // Stufe 3: ohne Signaturen speichern – Signaturen sind bereits auf dem Server,
+  // der lokale Fallback-Eintrag braucht sie nicht zwingend.
+  console.warn('Immer noch voll – speichere ohne Signaturen');
+  const withoutSigs = {
+    ...data,
+    besatzungen: (data.besatzungen || []).map(b => ({ ...b, signature: '' }))
+  };
+  try {
+    localStorage.setItem(key, JSON.stringify(withoutSigs));
+    showSaveNotification('⚠ Lokaler Speicher fast voll – Signaturen nur auf Server', true);
+    return true;
+  } catch (e) {
+    console.error('localStorage auch ohne Signaturen voll:', e);
+    showSaveNotification('⚠ Lokaler Speicher voll – bitte Browser-Daten löschen', true);
+    return false;
+  }
+}
+
+function isQuotaError(e) {
+  return e && (
+    e.name === 'QuotaExceededError' ||
+    e.name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
+    e.code === 22 || e.code === 1014
+  );
+}
+
+// Löscht alle einsatz_*-Einträge außer dem aktuellen.
+function purgeOtherLocalEinsaetze(keepEinsatznummer) {
+  const toRemove = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && k.startsWith('einsatz_') && k !== `einsatz_${keepEinsatznummer}`) {
+      toRemove.push(k);
+    }
+  }
+  toRemove.forEach(k => { try { localStorage.removeItem(k); } catch (_) {} });
+  if (toRemove.length > 0) {
+    console.log(`${toRemove.length} alte lokale Einsätze entfernt`);
+  }
+}
+
+// Beim Seitenstart nur die letzten LOCAL_KEEP_COUNT Einsätze behalten.
+// Alle anderen werden entfernt – der Server ist die eigentliche Quelle,
+// localStorage ist nur ein schneller Puffer für die zuletzt geöffneten Einträge.
+const LOCAL_KEEP_COUNT = 5;
+function cleanupOldLocalEinsaetze() {
+  const entries = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (!k || !k.startsWith('einsatz_')) continue;
+    try {
+      const raw = localStorage.getItem(k);
+      if (!raw) { localStorage.removeItem(k); continue; }
+      const obj = JSON.parse(raw);
+      // Datum aus dem gespeicherten Einsatz lesen (Format: DD.MM.YYYY)
+      const datumStr = obj && obj.einsatz && obj.einsatz.datum;
+      let ts = 0;
+      if (datumStr) {
+        const parts = datumStr.split('.');
+        if (parts.length === 3) {
+          ts = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`).getTime() || 0;
+        }
+      }
+      entries.push({ key: k, ts });
+    } catch (_) {
+      // Kaputten Eintrag direkt entfernen
+      try { localStorage.removeItem(k); } catch (_) {}
+    }
+  }
+
+  // Neueste zuerst sortieren, alles ab Platz LOCAL_KEEP_COUNT entfernen
+  entries.sort((a, b) => b.ts - a.ts);
+  const toRemove = entries.slice(LOCAL_KEEP_COUNT);
+  toRemove.forEach(e => { try { localStorage.removeItem(e.key); } catch (_) {} });
+  if (toRemove.length > 0) {
+    console.log(`Aufräumen: ${toRemove.length} alte lokale Einsätze entfernt, ${Math.min(entries.length, LOCAL_KEEP_COUNT)} behalten`);
+  }
+}
+
 // XSS-Schutz: HTML-Escape Funktion
 function escapeHtml(unsafe) {
     if (unsafe === null || unsafe === undefined) return '';
@@ -98,40 +229,39 @@ async function loadEinsatzDaten() {
   
   try {
     const response = await fetch(`${SERVER_URL}/einsatz/${einsatznummer}`);
-    
+
     if (!response.ok) {
-      const localData = localStorage.getItem(`einsatz_${einsatznummer}`);
+      const localData = readLocalEinsatz(einsatznummer);
       if (localData) {
-        const data = JSON.parse(localData);
-        applyEinsatzData(data);
+        applyEinsatzData(localData);
       } else {
         initializeNewEinsatz(einsatznummer, params);
       }
       return;
     }
-    
+
     const data = await response.json();
-    
+
     if (!data.einsatz || (!data.fahrzeuge.length && !data.besatzungen.length)) {
-      const localData = localStorage.getItem(`einsatz_${einsatznummer}`);
+      const localData = readLocalEinsatz(einsatznummer);
       if (localData) {
-        applyEinsatzData(JSON.parse(localData));
+        applyEinsatzData(localData);
       } else {
         initializeNewEinsatz(einsatznummer, params);
       }
       return;
     }
-    
+
     applyEinsatzData(data);
-    
+
     // Nur PDF-Versionen laden wenn bereits welche existieren
     loadPDFVersions(currentEinsatzId);
-    
+
   } catch (error) {
     console.error('Fehler beim Laden:', error);
-    const localData = localStorage.getItem(`einsatz_${einsatznummer}`);
+    const localData = readLocalEinsatz(einsatznummer);
     if (localData) {
-      applyEinsatzData(JSON.parse(localData));
+      applyEinsatzData(localData);
     } else {
       alert('Fehler beim Laden der Daten.');
       window.location.href = 'input_doku.html';
@@ -246,11 +376,17 @@ function createFahrzeugSection(fahrzeugTyp) {
     nameInput.placeholder = "Name eingeben";
     nameInput.value = member.name;
     nameInput.autocomplete = "off";
-    nameInput.addEventListener("change", (e) => {
+    // 'input' triggert bei jedem Tastendruck (wichtig auf Android: 'change' feuert
+    // erst beim Verlassen des Felds – wenn der User die App in den Hintergrund
+    // schiebt oder das Tablet rotiert, ohne zu blurren, sind die Daten sonst weg).
+    // 'change' bleibt als Fallback für Autofill/Programm-Setzen.
+    const onNameChange = (e) => {
       besatzungen[fahrzeugTyp][index].name = e.target.value;
       saveDataLocal();
       triggerAutoSave();
-    });
+    };
+    nameInput.addEventListener("input", onNameChange);
+    nameInput.addEventListener("change", onNameChange);
     nameCell.appendChild(nameInput);
     row.appendChild(nameCell);
     autocomplete(nameInput, namensListe);
@@ -299,11 +435,15 @@ function createFahrzeugSection(fahrzeugTyp) {
     paInput.style.marginTop = "5px";
     paInput.style.display = member.pa ? "block" : "none";
     paInput.value = member.paMinuten;
-    paInput.addEventListener("change", (e) => {
+    // Siehe Name-Input: 'input' deckt Android-Fall ab, dass der User das Feld
+    // nicht verlässt, bevor er die App wechselt oder das Tablet sperrt.
+    const onPaChange = (e) => {
       besatzungen[fahrzeugTyp][index].paMinuten = e.target.value;
       saveDataLocal();
       triggerAutoSave();
-    });
+    };
+    paInput.addEventListener("input", onPaChange);
+    paInput.addEventListener("change", onPaChange);
     paInput.addEventListener("blur", (e) => {
       const checkbox = paCell.querySelector('input[type="checkbox"]');
       if (checkbox.checked && (e.target.value === '' || e.target.value === null)) {
@@ -394,7 +534,7 @@ function saveDataLocal() {
     });
   });
   
-  localStorage.setItem(`einsatz_${currentEinsatzId}`, JSON.stringify(dataToSave));
+  writeLocalEinsatz(currentEinsatzId, dataToSave);
 }
 
 // Hauptfunktion: Speichern der Daten
@@ -729,19 +869,46 @@ async function sendCurrentVersion() {
 }
 
 // Autocomplete-Funktionalität
+//
+// Positions-Logik: Auf Android-Tablets im Hochkantmodus überdeckt die Soft-Tastatur
+// häufig den Bereich unter dem aktiven Input – das Dropdown wäre dort unsichtbar.
+// positionAutocompleteList() misst per visualViewport, wieviel Platz unter dem
+// Input noch da ist. Wenn weniger als die Listenhöhe (oder mind. 120 px) frei
+// sind, wird die Liste über dem Input geöffnet (Klasse 'above').
+function positionAutocompleteList(input, list) {
+  if (!input || !list) return;
+
+  const inputRect = input.getBoundingClientRect();
+  const vv = window.visualViewport;
+  const viewportHeight = vv ? vv.height : window.innerHeight;
+  const viewportTop = vv ? vv.offsetTop : 0;
+
+  const spaceBelow = (viewportTop + viewportHeight) - inputRect.bottom;
+  const spaceAbove = inputRect.top - viewportTop;
+  const listHeight = Math.min(list.scrollHeight || 200, 200);
+
+  // Wenn unter dem Input zu wenig Platz ist UND über dem Input mehr Platz wäre,
+  // klappen wir nach oben auf.
+  if (spaceBelow < Math.max(listHeight, 120) && spaceAbove > spaceBelow) {
+    list.classList.add('above');
+  } else {
+    list.classList.remove('above');
+  }
+}
+
 function autocomplete(inp, arr) {
   let currentFocus;
-  
+
   inp.addEventListener("input", function(e) {
     const val = this.value;
     closeAllLists();
     if (!val) return false;
     currentFocus = -1;
-    
+
     const autocompleteList = document.createElement("div");
     autocompleteList.setAttribute("class", "autocomplete-items");
     this.parentNode.appendChild(autocompleteList);
-    
+
     for (let i = 0; i < arr.length; i++) {
       if (arr[i].toLowerCase().includes(val.toLowerCase())) {
         const item = document.createElement("div");
@@ -767,11 +934,31 @@ function autocomplete(inp, arr) {
           inp.dispatchEvent(event);
           closeAllLists();
         });
-        
+
         autocompleteList.appendChild(item);
       }
     }
+
+    // Erst nach dem Befüllen positionieren – sonst kennt scrollHeight die Höhe nicht.
+    // requestAnimationFrame wartet auf den nächsten Layout-Pass, damit
+    // getBoundingClientRect die aktualisierten Werte zurückgibt (wichtig auf
+    // Android, wo der visualViewport beim Öffnen der Tastatur asynchron schrumpft).
+    requestAnimationFrame(() => positionAutocompleteList(inp, autocompleteList));
   });
+
+  // Wenn die Tastatur sich öffnet/schließt, schrumpft visualViewport.
+  // Das aktive Dropdown unter diesem Input dann neu positionieren.
+  if (window.visualViewport && !window._autocompleteVvBound) {
+    window._autocompleteVvBound = true;
+    const reposition = () => {
+      const active = document.activeElement;
+      if (!active || !active.parentNode) return;
+      const list = active.parentNode.querySelector('.autocomplete-items');
+      if (list) positionAutocompleteList(active, list);
+    };
+    window.visualViewport.addEventListener('resize', reposition);
+    window.visualViewport.addEventListener('scroll', reposition);
+  }
   
   inp.addEventListener("keydown", function(e) {
     let x = this.parentNode.querySelector(".autocomplete-items");
@@ -825,16 +1012,29 @@ function openSignatureModal(fahrzeugTyp, index, position, row) {
 
   document.getElementById("current-position").textContent = position;
   document.getElementById("signature-modal").style.display = "block";
-  
+
+  // Canvas erst dimensionieren, dann Inhalte laden – sonst wird die geladene
+  // Unterschrift durch das anschließende Resize wieder gelöscht.
+  resizeCanvas();
+
   if (signaturePad) {
     signaturePad.clear();
+
+    const existing = besatzungen[fahrzeugTyp][index].signature;
+    if (existing) {
+      try {
+        const result = signaturePad.fromDataURL(existing);
+        if (result && typeof result.catch === "function") {
+          result.catch((err) => {
+            console.warn("Konnte vorhandene Unterschrift nicht laden:", err);
+          });
+        }
+      } catch (err) {
+        // Fehler beim Wiederherstellen dürfen das Modal nicht blockieren.
+        console.warn("Konnte vorhandene Unterschrift nicht laden:", err);
+      }
+    }
   }
-  
-  if (besatzungen[fahrzeugTyp][index].signature) {
-    signaturePad.fromDataURL(besatzungen[fahrzeugTyp][index].signature);
-  }
-  
-  resizeCanvas();
 }
 
 function closeSignatureModal() {
@@ -848,25 +1048,42 @@ function clearSignature() {
 }
 
 function saveSignature() {
-  if (signaturePad.isEmpty()) {
+  if (!signaturePad || signaturePad.isEmpty()) {
     alert("Bitte unterschreiben Sie zuerst.");
     return;
   }
-  
-  const dataURL = signaturePad.toDataURL();
-  besatzungen[currentFahrzeug][currentPosition].signature = dataURL;
-  
-  const signatureImg = document.getElementById(`signature-img-${currentFahrzeug}-${currentPosition}`);
-  signatureImg.src = dataURL;
-  signatureImg.classList.remove("hidden");
-  signatureImg.style.display = "block";
-  
-  const signButton = currentRow.querySelector("button");
-  signButton.textContent = "Neu unterschreiben";
 
-  saveDataLocal();
-  triggerAutoSave();
-  closeSignatureModal();
+  // Modal in try/finally schließen – falls beim UI-Update eine Referenz null ist
+  // (z. B. weil zwischenzeitlich updateFahrzeugTables() lief), darf das Modal
+  // nicht auf dem Tablet hängen bleiben.
+  try {
+    const dataURL = signaturePad.toDataURL();
+    besatzungen[currentFahrzeug][currentPosition].signature = dataURL;
+
+    const signatureImg = document.getElementById(
+      `signature-img-${currentFahrzeug}-${currentPosition}`
+    );
+    if (signatureImg) {
+      signatureImg.src = dataURL;
+      signatureImg.classList.remove("hidden");
+      signatureImg.style.display = "block";
+    }
+
+    if (currentRow) {
+      const signButton = currentRow.querySelector("button");
+      if (signButton) {
+        signButton.textContent = "Neu unterschreiben";
+      }
+    }
+
+    saveDataLocal();
+    triggerAutoSave();
+  } catch (err) {
+    console.error('Fehler beim Speichern der Unterschrift:', err);
+    alert('Unterschrift konnte nicht übernommen werden. Bitte erneut versuchen.');
+  } finally {
+    closeSignatureModal();
+  }
 }
 
 function initSignaturePad() {
@@ -882,13 +1099,28 @@ function initSignaturePad() {
 
 function resizeCanvas() {
   const canvas = document.getElementById("signature-pad");
+  if (!canvas) return;
+
+  // Wenn das Modal noch nicht sichtbar ist, hat das Canvas Größe 0 –
+  // dann kein Resize durchführen, sonst geht die laufende Zeichnung verloren.
+  if (canvas.offsetWidth === 0 || canvas.offsetHeight === 0) {
+    return;
+  }
+
   const ratio = Math.max(window.devicePixelRatio || 1, 1);
+
+  // Bestehende Strokes sichern, BEVOR canvas.width/height neu gesetzt werden
+  // (das resettet den Canvas-Inhalt).
+  const data = signaturePad ? signaturePad.toData() : null;
+
   canvas.width = canvas.offsetWidth * ratio;
   canvas.height = canvas.offsetHeight * ratio;
-  canvas.getContext("2d").scale(ratio, ratio);
-  
+  const ctx = canvas.getContext("2d");
+  ctx.scale(ratio, ratio);
+
   if (signaturePad) {
-    const data = signaturePad.toData();
+    // clear() malt den weißen Hintergrund neu und setzt den Stift-Stil
+    // wieder korrekt (nach width/height-Reset waren die ctx-Properties default).
     signaturePad.clear();
     if (data && data.length > 0) {
       signaturePad.fromData(data);
@@ -945,6 +1177,10 @@ function updateFahrzeugCheckboxes() {
 
 // Initialisierung beim Laden der Seite
 document.addEventListener("DOMContentLoaded", async function() {
+  // Zuerst alten localStorage-Ballast wegräumen, damit beim ersten Speichern
+  // genug Platz da ist (wichtig auf Android-Tablets mit ~5 MB Quota).
+  cleanupOldLocalEinsaetze();
+
   initSignaturePad();
 
   // Lade zuerst die Fahrzeuge, dann Namen, dann Einsatzdaten
