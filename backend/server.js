@@ -348,15 +348,11 @@ function runAutoSendCheck() {
 
     // created_at wird von SQLite als UTC (CURRENT_TIMESTAMP) gespeichert,
     // datetime('now', ...) liefert ebenfalls UTC -> direkter Textvergleich ist korrekt.
-    // Der Stichtag (auto_send_since) sorgt dafür, dass NUR ab Aktivierung erstellte
-    // Berichte automatisch versendet werden – alte Bestände bleiben unangetastet.
-    // Fehlt der Stichtag (NULL), wird nichts ausgewählt (sichere Variante).
     const sql = `
         SELECT p.* FROM pdfs p
         WHERE p.email_sent = 0
           AND p.version = (SELECT MAX(version) FROM pdfs WHERE einsatznummer = p.einsatznummer)
           AND p.created_at <= datetime('now', ?)
-          AND p.created_at >= (SELECT value FROM app_settings WHERE key = 'auto_send_since')
         ORDER BY p.created_at ASC`;
 
     db.all(sql, [`-${AUTO_SEND_HOURS} hours`], async (err, rows) => {
@@ -535,23 +531,6 @@ const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CR
                 teilnehmer TEXT,
                 erstellt_am DATETIME DEFAULT CURRENT_TIMESTAMP
             )`);
-
-            // Kleine Key-Value-Tabelle für App-Einstellungen.
-            db.run(`CREATE TABLE IF NOT EXISTS app_settings (
-                key TEXT PRIMARY KEY,
-                value TEXT
-            )`);
-
-            // Stichtag für den automatischen Versand: Wird EINMALIG beim ersten
-            // Start nach der Aktivierung gesetzt. Nur Berichte, die ab diesem
-            // Zeitpunkt erstellt werden, dürfen automatisch versendet werden.
-            // Bereits vorhandene (alte) Berichte bleiben so unangetastet.
-            // INSERT OR IGNORE -> bei vorhandenem Schlüssel passiert nichts.
-            db.run(`INSERT OR IGNORE INTO app_settings (key, value) VALUES ('auto_send_since', datetime('now'))`, (err) => {
-                if (err) {
-                    console.error('Fehler beim Setzen des auto_send_since-Stichtags:', err.message);
-                }
-            });
         });
     }
 });
@@ -1893,12 +1872,6 @@ app.listen(PORT, () => {
     // Automatischen Versand nicht abgeschickter Berichte starten.
     if (isMailConfigured()) {
         console.log(`[AUTO-SEND] Aktiv: nicht versendete Berichte werden nach ${AUTO_SEND_HOURS}h automatisch verschickt (Prüfung alle ${Math.round(AUTO_SEND_CHECK_INTERVAL_MS / 60000)} Min).`);
-        // Stichtag ausgeben: nur ab diesem Zeitpunkt (UTC) erstellte Berichte werden automatisch versendet.
-        db.get(`SELECT value FROM app_settings WHERE key = 'auto_send_since'`, (err, row) => {
-            if (!err && row) {
-                console.log(`[AUTO-SEND] Stichtag (UTC): nur Berichte ab ${row.value} werden automatisch versendet – ältere Bestände bleiben unangetastet.`);
-            }
-        });
         // Einmal kurz nach dem Start prüfen (z. B. nach einem Neustart während eines offenen Zeitraums),
         // danach im festen Intervall.
         setTimeout(runAutoSendCheck, 10 * 1000);
