@@ -238,6 +238,143 @@ if (SMTP_CONFIG.auth.user && SMTP_CONFIG.auth.pass) {
     console.warn('  - SMTP_PASS vorhanden:', !!SMTP_CONFIG.auth.pass);
 }
 
+// === AUTOMATISCHER VERSAND NICHT ABGESCHICKTER BERICHTE ===
+// Wird ein Bericht (PDF-Version) gespeichert, aber innerhalb von AUTO_SEND_HOURS
+// Stunden nicht manuell versendet, verschickt das System ihn automatisch an die
+// üblichen Empfänger. Maßgeblich ist die jüngste Version je Einsatz; eine neue
+// Version setzt den Zeitraum zurück, ein manueller Versand bricht ihn ab.
+const AUTO_SEND_HOURS = parseInt(process.env.AUTO_SEND_HOURS || '6', 10);
+const AUTO_SEND_CHECK_INTERVAL_MS = parseInt(process.env.AUTO_SEND_CHECK_INTERVAL_MS || String(5 * 60 * 1000), 10);
+
+// Prüft, ob E-Mail-Versand grundsätzlich konfiguriert ist (Transporter + echte Empfänger).
+function isMailConfigured() {
+    return !!mailTransporter
+        && !!EMAIL_RECIPIENTS_BERICHT
+        && !EMAIL_RECIPIENTS_BERICHT.includes('example.com');
+}
+
+// Gemeinsame Versand-Funktion für Berichts-PDFs (manuell wie automatisch).
+// Bei automatic=true wird in Betreff UND Text deutlich gekennzeichnet, dass die
+// Mail automatisch nach einem Einsatz verschickt wurde.
+async function sendBerichtMail(pdf, { automatic = false } = {}) {
+    if (!mailTransporter) {
+        throw new Error('E-Mail-Dienst nicht konfiguriert. Prüfen Sie die SMTP-Einstellungen.');
+    }
+    if (!EMAIL_RECIPIENTS_BERICHT) {
+        throw new Error('Keine E-Mail-Empfänger konfiguriert. Bitte EMAIL_RECIPIENTS_BERICHT in .env setzen.');
+    }
+    if (EMAIL_RECIPIENTS_BERICHT.includes('example.com')) {
+        throw new Error('E-Mail-Empfänger sind nicht korrekt konfiguriert. Bitte echte E-Mail-Adressen in .env.smtp eintragen.');
+    }
+    if (!fs.existsSync(pdf.filepath)) {
+        throw new Error('PDF-Datei existiert nicht auf dem Server');
+    }
+
+    const einsatznummer = pdf.einsatznummer;
+    const recipients = EMAIL_RECIPIENTS_BERICHT.split(',').map(e => e.trim()).filter(Boolean);
+
+    let subject;
+    let message;
+    if (automatic) {
+        subject = `⚠ AUTOMATISCH VERSENDET – Einsatzbericht ${einsatznummer}`;
+        message =
+            `Guten Tag,\n\n` +
+            `WICHTIGER HINWEIS: Diese E-Mail wurde AUTOMATISCH vom System versendet – sie wurde NICHT von einer Person ausgelöst.\n\n` +
+            `Hintergrund: Nach einem Einsatz wurde der Einsatzbericht mit der Einsatznummer ${einsatznummer} gespeichert, ` +
+            `aber innerhalb von ${AUTO_SEND_HOURS} Stunden nicht manuell verschickt. Damit der Bericht nicht liegen bleibt, ` +
+            `hat das System ihn nun automatisch an die üblichen Empfänger gesendet.\n\n` +
+            `Der vollständige Bericht befindet sich im PDF-Anhang. Es ist keine weitere Aktion erforderlich.\n\n` +
+            `Bei Fragen wenden Sie sich bitte an support@feuerwehr-frechen.de\n\n` +
+            `Mit freundlichen Grüßen\n` +
+            `Feuerwehr Frechen (automatischer Versand)`;
+    } else {
+        subject = `Neuer Einsatzbericht - ${einsatznummer}`;
+        message = `Guten Tag,\n\nEin neuer Einsatz Bericht mit der Einsatznummer ${einsatznummer} wurde geschrieben.\nBei Fragen wenden Sie sich bitte an support@feuerwehr-frechen.de\n\nMit freundlichen Grüßen\nFeuerwehr Frechen`;
+    }
+
+    const mailOptions = {
+        from: SMTP_CONFIG.auth.user,
+        bcc: recipients.join(','), // BCC statt TO für Datenschutz - Empfänger sehen sich nicht
+        subject: subject,
+        text: message,
+        attachments: [
+            {
+                filename: pdf.filename,
+                path: pdf.filepath
+            }
+        ]
+    };
+
+    const info = await mailTransporter.sendMail(mailOptions);
+    return { info, recipients };
+}
+
+// Läuft regelmäßig und nicht überlappend. Findet je Einsatz die jüngste,
+// noch nicht versendete PDF-Version, deren Speicherung älter als
+// AUTO_SEND_HOURS ist, und verschickt sie automatisch.
+let autoSendRunning = false;
+function runAutoSendCheck() {
+    if (autoSendRunning) return;
+    if (!isMailConfigured()) {
+        // Nicht konfiguriert -> nichts zu tun, still überspringen.
+        return;
+    }
+    autoSendRunning = true;
+
+    // created_at wird von SQLite als UTC (CURRENT_TIMESTAMP) gespeichert,
+    // datetime('now', ...) liefert ebenfalls UTC -> direkter Textvergleich ist korrekt.
+    const sql = `
+        SELECT p.* FROM pdfs p
+        WHERE p.email_sent = 0
+          AND p.version = (SELECT MAX(version) FROM pdfs WHERE einsatznummer = p.einsatznummer)
+          AND p.created_at <= datetime('now', ?)
+        ORDER BY p.created_at ASC`;
+
+    db.all(sql, [`-${AUTO_SEND_HOURS} hours`], async (err, rows) => {
+        if (err) {
+            console.error('[AUTO-SEND] DB-Fehler beim Ermitteln offener Berichte:', err.message);
+            autoSendRunning = false;
+            return;
+        }
+
+        if (rows.length > 0) {
+            console.log(`[AUTO-SEND] ${rows.length} nicht versendete(r) Bericht(e) älter als ${AUTO_SEND_HOURS}h gefunden.`);
+        }
+
+        for (const pdf of rows) {
+            try {
+                const { info, recipients } = await sendBerichtMail(pdf, { automatic: true });
+                await new Promise((resolve) => {
+                    db.run('UPDATE pdfs SET email_sent = 1, auto_sent = 1 WHERE id = ?', [pdf.id], (uErr) => {
+                        if (uErr) console.error('[AUTO-SEND] Fehler beim Markieren der PDF:', uErr.message);
+                        resolve();
+                    });
+                });
+                console.log(`[AUTO-SEND] ✓ Bericht ${pdf.einsatznummer} V${pdf.version} automatisch an ${recipients.length} Empfänger versendet (Message-ID ${info.messageId}).`);
+                debugLogPush({
+                    level: 'info',
+                    type: 'auto-send',
+                    einsatznummer: pdf.einsatznummer,
+                    version: pdf.version,
+                    recipients: recipients.length,
+                    messageId: info.messageId
+                });
+            } catch (e) {
+                console.error(`[AUTO-SEND] ✗ Fehler beim automatischen Versand von ${pdf.einsatznummer} V${pdf.version}:`, e.message);
+                debugLogPush({
+                    level: 'error',
+                    type: 'auto-send-error',
+                    einsatznummer: pdf.einsatznummer,
+                    version: pdf.version,
+                    error: e.message
+                });
+            }
+        }
+
+        autoSendRunning = false;
+    });
+}
+
 // Datenbankpfad aus Umgebungsvariable oder Standardwert
 const dbPath = process.env.DB_PATH || path.join(__dirname, 'data', 'einsatzdoku.db');
 
@@ -337,9 +474,17 @@ const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CR
                 filepath TEXT,
                 created_by TEXT,
                 email_sent INTEGER DEFAULT 0,
+                auto_sent INTEGER DEFAULT 0,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (einsatznummer) REFERENCES einsaetze(einsatznummer) ON DELETE CASCADE
             )`);
+
+            // Schema-Migration: Spalte für automatisch versendete Berichte
+            db.run(`ALTER TABLE pdfs ADD COLUMN auto_sent INTEGER DEFAULT 0`, (err) => {
+                if (err && !err.message.includes('duplicate column name')) {
+                    console.error('Fehler beim Hinzufügen der Spalte "auto_sent":', err.message);
+                }
+            });
 
             // Tabelle für Anwesenheitslisten
             db.run(`CREATE TABLE IF NOT EXISTS anwesenheitslisten (
@@ -925,7 +1070,7 @@ app.get('/api/pdf/list/:einsatznummer', (req, res) => {
     const { einsatznummer } = req.params;
     
     db.all(
-        'SELECT id, version, filename, created_by, email_sent, created_at FROM pdfs WHERE einsatznummer = ? ORDER BY version DESC',
+        'SELECT id, version, filename, created_by, email_sent, auto_sent, created_at FROM pdfs WHERE einsatznummer = ? ORDER BY version DESC',
         [einsatznummer],
         (err, rows) => {
             if (err) {
@@ -1045,46 +1190,15 @@ app.post('/api/pdf/email', async (req, res) => {
             console.error('[EMAIL] PDF-Datei nicht gefunden:', pdf.filepath);
             return res.status(404).json({ error: 'PDF-Datei existiert nicht auf dem Server' });
         }
-        
-        // Hole Einsatznummer für E-Mail-Text
-        const einsatznummer = pdf.einsatznummer;
-        const recipients = EMAIL_RECIPIENTS_BERICHT.split(',').map(e => e.trim());
-        
-        console.log('[EMAIL] Empfänger:', recipients);
-        
-        const subject = `Neuer Einsatzbericht - ${einsatznummer}`;
-        const message = `Guten Tag,\n\nEin neuer Einsatz Bericht mit der Einsatznummer ${einsatznummer} wurde geschrieben.\nBei Fragen wenden Sie sich bitte an support@feuerwehr-frechen.de\n\nMit freundlichen Grüßen\nFeuerwehr Frechen`;
 
         try {
-            console.log('[EMAIL] Sende E-Mail...');
+            console.log('[EMAIL] Sende E-Mail (manuell)...');
             console.log('[EMAIL] Von:', SMTP_CONFIG.auth.user);
-            console.log('[EMAIL] An:', recipients.join(','));
-            console.log('[EMAIL] Betreff:', subject);
             console.log('[EMAIL] Anhang:', pdf.filename);
             console.log('[EMAIL] Dateipfad:', pdf.filepath);
-            
-            const mailOptions = {
-                from: SMTP_CONFIG.auth.user,
-                bcc: recipients.join(','), // BCC statt TO für Datenschutz - Empfänger sehen sich nicht
-                subject: subject,
-                text: message,
-                attachments: [
-                    {
-                        filename: pdf.filename,
-                        path: pdf.filepath
-                    }
-                ]
-            };
 
-            console.log('[EMAIL] Mail-Optionen:', JSON.stringify({
-                from: mailOptions.from,
-                bcc: mailOptions.bcc,
-                subject: mailOptions.subject,
-                attachmentCount: mailOptions.attachments.length
-            }, null, 2));
-            
-            const info = await mailTransporter.sendMail(mailOptions);
-            
+            const { info, recipients } = await sendBerichtMail(pdf, { automatic: false });
+
             console.log('[EMAIL] ✓ E-Mail erfolgreich versendet!');
             console.log('[EMAIL] Message ID:', info.messageId);
             console.log('[EMAIL] Response:', info.response);
@@ -1710,4 +1824,15 @@ app.get('*.env*', (req, res) => {
 
 app.listen(PORT, () => {
     console.log(`Server läuft auf Port ${PORT}`);
+
+    // Automatischen Versand nicht abgeschickter Berichte starten.
+    if (isMailConfigured()) {
+        console.log(`[AUTO-SEND] Aktiv: nicht versendete Berichte werden nach ${AUTO_SEND_HOURS}h automatisch verschickt (Prüfung alle ${Math.round(AUTO_SEND_CHECK_INTERVAL_MS / 60000)} Min).`);
+        // Einmal kurz nach dem Start prüfen (z. B. nach einem Neustart während eines offenen Zeitraums),
+        // danach im festen Intervall.
+        setTimeout(runAutoSendCheck, 10 * 1000);
+        setInterval(runAutoSendCheck, AUTO_SEND_CHECK_INTERVAL_MS);
+    } else {
+        console.warn('[AUTO-SEND] Inaktiv: E-Mail-Versand ist nicht (vollständig) konfiguriert.');
+    }
 });

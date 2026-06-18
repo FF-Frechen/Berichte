@@ -741,9 +741,14 @@ async function loadPDFVersions(einsatznummer) {
           // Alle drei Buttons als echte <button> Elemente für einheitliche Größe
           const downloadButton = `<button onclick="window.open('${SERVER_URL}/pdf/file/${pdf.id}', '_blank')" style="background-color: #003049;">📥 Download</button>`;
 
-          const emailButton = pdf.email_sent === 1
-            ? '<button disabled style="background-color: #6c757d; cursor: not-allowed;">✅ Versendet</button>'
-            : `<button onclick="sendPDFEmail(${pdf.id}, ${pdf.version})" style="background-color: #198754;">📧 E-Mail senden</button>`;
+          let emailButton;
+          if (pdf.email_sent === 1 && pdf.auto_sent === 1) {
+            emailButton = '<button disabled style="background-color: #6c757d; cursor: not-allowed;">🤖 Automatisch versendet</button>';
+          } else if (pdf.email_sent === 1) {
+            emailButton = '<button disabled style="background-color: #6c757d; cursor: not-allowed;">✅ Versendet</button>';
+          } else {
+            emailButton = `<button onclick="sendPDFEmail(${pdf.id}, ${pdf.version})" style="background-color: #198754;">📧 E-Mail senden</button>`;
+          }
 
           const deleteButton = `<button onclick="deletePDF(${pdf.id}, ${pdf.version})" style="background-color: #d62828;">🗑️ Löschen</button>`;
 
