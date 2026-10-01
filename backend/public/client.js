@@ -11,6 +11,49 @@ let currentVersionToSend = null;
 let currentVersionPdfId = null;
 let autoSaveTimeout = null;
 let isSaving = false;
+let saveQueued = false;        // Änderung kam während laufendem Speichern → danach nochmal
+let pendingServerSave = false; // letzter Server-Speicherversuch fehlgeschlagen
+
+// Verbindungsstatus an das Banner (frontend/connection-status.js) melden.
+// Optional – falls das Script nicht geladen ist, passiert einfach nichts.
+function reportConnectionOk() {
+  if (window.ConnectionStatus) window.ConnectionStatus.reportOk();
+}
+function reportConnectionFailure(reason) {
+  if (window.ConnectionStatus) window.ConnectionStatus.reportFailure(reason);
+}
+
+// Dauerhafter Hinweis, wenn die angezeigten Daten nicht vom Server stammen.
+function showLocalDataWarning() {
+  if (document.getElementById('local-data-warning')) return;
+  const box = document.createElement('div');
+  box.id = 'local-data-warning';
+  box.style.cssText = 'background:#fff3cd;color:#842029;border-left:4px solid #d62828;' +
+    'padding:12px 15px;margin:10px 0 20px;border-radius:5px;font-weight:bold;';
+  box.textContent = '⚠ Daten aus dem lokalen Zwischenspeicher des Tablets – der Server war beim Laden nicht erreichbar. ' +
+    'Änderungen werden erst gespeichert, wenn die Verbindung wieder da ist.';
+  const container = document.querySelector('.container') || document.body;
+  container.insertBefore(box, container.firstChild);
+}
+// Verbindung ist wieder da, aber offline wurde nichts geändert → Nutzer bietet
+// sich an, den aktuellen Serverstand zu laden (nicht automatisch, damit z. B.
+// eine gerade gezeichnete Unterschrift nicht verloren geht).
+function offerReloadAfterReconnect() {
+  const box = document.getElementById('local-data-warning');
+  if (!box) return;
+  box.style.background = '#d1e7dd';
+  box.style.color = '#0f5132';
+  box.style.borderLeftColor = '#198754';
+  box.textContent = '✓ Server wieder erreichbar – die angezeigten Daten stammen noch aus dem lokalen Zwischenspeicher. ';
+  const btn = document.createElement('button');
+  btn.textContent = 'Aktuellen Stand vom Server laden';
+  btn.addEventListener('click', () => window.location.reload());
+  box.appendChild(btn);
+}
+function hideLocalDataWarning() {
+  const box = document.getElementById('local-data-warning');
+  if (box) box.remove();
+}
 
 const SERVER_URL = '/api';
 
@@ -211,7 +254,8 @@ async function ladeFahrzeuge() {
 
   } catch (error) {
     console.error('Fehler beim Laden der Fahrzeuge:', error);
-    alert('Fehler beim Laden der Fahrzeugkonfiguration. Bitte prüfen Sie die .env.fahrzeuge Datei.');
+    reportConnectionFailure('Fahrzeugkonfiguration konnte nicht geladen werden');
+    alert('Fehler beim Laden der Fahrzeugkonfiguration – der Server ist vermutlich nicht erreichbar. Bitte Verbindung prüfen und Seite neu laden.');
   }
 }
 
@@ -231,9 +275,14 @@ async function loadEinsatzDaten() {
     const response = await fetch(`${SERVER_URL}/einsatz/${einsatznummer}`);
 
     if (!response.ok) {
+      // 404 = Einsatz existiert auf dem Server noch nicht (normal bei neuem Einsatz).
+      // 5xx (z. B. 502 von nginx, wenn das Backend weg ist) = Serverproblem.
+      const serverProblem = response.status >= 500;
+      if (serverProblem) reportConnectionFailure(`Server-Fehler ${response.status} beim Laden`);
       const localData = readLocalEinsatz(einsatznummer);
       if (localData) {
         applyEinsatzData(localData);
+        if (serverProblem) showLocalDataWarning();
       } else {
         initializeNewEinsatz(einsatznummer, params);
       }
@@ -241,6 +290,7 @@ async function loadEinsatzDaten() {
     }
 
     const data = await response.json();
+    reportConnectionOk();
 
     if (!data.einsatz || (!data.fahrzeuge.length && !data.besatzungen.length)) {
       const localData = readLocalEinsatz(einsatznummer);
@@ -259,11 +309,13 @@ async function loadEinsatzDaten() {
 
   } catch (error) {
     console.error('Fehler beim Laden:', error);
+    reportConnectionFailure('Einsatzdaten konnten nicht geladen werden');
     const localData = readLocalEinsatz(einsatznummer);
     if (localData) {
       applyEinsatzData(localData);
+      showLocalDataWarning();
     } else {
-      alert('Fehler beim Laden der Daten.');
+      alert('Fehler beim Laden der Daten – der Server ist nicht erreichbar.');
       window.location.href = 'input_doku.html';
     }
   }
@@ -593,11 +645,18 @@ async function saveData() {
   }
 }
 
-// Auto-save function (silent, no notifications)
+// Auto-save: speichert lokal und auf dem Server. Fehler werden NICHT mehr
+// verschluckt, sondern an das Verbindungs-Banner gemeldet; die Speicherung
+// wird bei Wiederverbindung automatisch nachgeholt.
 async function autoSave() {
-  if (isSaving) return;
+  if (isSaving) {
+    // Nicht verwerfen – nach dem laufenden Speichern erneut speichern
+    saveQueued = true;
+    return;
+  }
 
   isSaving = true;
+  saveQueued = false;
   saveDataLocal();
 
   const besatzungenArray = [];
@@ -629,15 +688,32 @@ async function autoSave() {
   };
 
   try {
-    await fetch(`${SERVER_URL}/einsatz`, {
+    const response = await fetch(`${SERVER_URL}/einsatz`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(einsatzData)
     });
+    if (!response.ok) {
+      throw new Error(`Server-Fehler ${response.status}`);
+    }
+    if (pendingServerSave) {
+      showSaveNotification('✓ Ausstehende Änderungen auf dem Server gespeichert');
+    }
+    pendingServerSave = false;
+    hideLocalDataWarning();
+    reportConnectionOk();
   } catch (error) {
-    console.log('Auto-save: Netzwerkfehler, lokal gespeichert');
+    console.warn('Auto-save fehlgeschlagen, nur lokal gespeichert:', error);
+    if (!pendingServerSave) {
+      showSaveNotification('⚠ Nicht auf dem Server gespeichert – nur lokal', true);
+    }
+    pendingServerSave = true;
+    reportConnectionFailure(error && error.message && error.message.startsWith('Server-Fehler')
+      ? `${error.message} beim Speichern`
+      : 'Speichern fehlgeschlagen');
   } finally {
     isSaving = false;
+    if (saveQueued) triggerAutoSave();
   }
 }
 
@@ -1168,7 +1244,11 @@ function updateFahrzeugCheckboxes() {
   // Event-Listener für alle Checkboxen hinzufügen
   const checkboxes = container.querySelectorAll('input[type="checkbox"][id^="fahrzeug-"]');
   checkboxes.forEach(checkbox => {
-    checkbox.addEventListener("change", updateFahrzeugTables);
+    checkbox.addEventListener("change", () => {
+      updateFahrzeugTables();
+      saveDataLocal();
+      triggerAutoSave();
+    });
   });
 
   // Event-Listener für Bereitstellungs-Checkboxen (Auto-Save)
@@ -1182,6 +1262,18 @@ function updateFahrzeugCheckboxes() {
 
 // Initialisierung beim Laden der Seite
 document.addEventListener("DOMContentLoaded", async function() {
+  // Nach Wiederverbindung ausstehende Änderungen automatisch nachspeichern
+  if (window.ConnectionStatus) {
+    window.ConnectionStatus.onReconnect(() => {
+      if (pendingServerSave && currentEinsatzId) {
+        // Offline gemachte Änderungen nachspeichern
+        triggerAutoSave();
+      } else {
+        offerReloadAfterReconnect();
+      }
+    });
+  }
+
   // Zuerst alten localStorage-Ballast wegräumen, damit beim ersten Speichern
   // genug Platz da ist (wichtig auf Android-Tablets mit ~5 MB Quota).
   cleanupOldLocalEinsaetze();

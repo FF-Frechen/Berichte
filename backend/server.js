@@ -57,6 +57,14 @@ process.on('unhandledRejection', (reason) => {
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 
+// API-Antworten nie cachen – das Tablet soll immer den echten Serverstand sehen
+// (oder einen Fehler), nicht eine alte Antwort aus dem Browser-Cache.
+// PDF-Routen setzen ihre eigenen Header und überschreiben das bei Bedarf nicht.
+app.use('/api', (req, res, next) => {
+    res.set('Cache-Control', 'no-store');
+    next();
+});
+
 // Request-Logger Middleware – läuft NACH express.json, damit wir auch die
 // geparste Body-Größe kennen, aber vor allen Routen.
 app.use((req, res, next) => {
@@ -530,6 +538,18 @@ const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CR
                 dienstleiter TEXT,
                 teilnehmer TEXT,
                 erstellt_am DATETIME DEFAULT CURRENT_TIMESTAMP
+            )`);
+
+            // Versand-Historie der Anwesenheitslisten (Dienste / Sonderdienste).
+            // Neue Tabelle – bestehende Tabellen werden nicht verändert.
+            db.run(`CREATE TABLE IF NOT EXISTS anwesenheit_versand (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                type TEXT NOT NULL,
+                datum TEXT,
+                thema TEXT,
+                dienstleiter TEXT,
+                teilnehmer_count INTEGER,
+                sent_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )`);
         });
     }
@@ -1547,6 +1567,23 @@ app.post('/api/anwesenheit/pdf', async (req, res) => {
     }
 });
 
+// Letzter Versand einer Anwesenheitsliste (für die Anzeige auf den Dienst-Seiten)
+app.get('/api/anwesenheit/last-sent', (req, res) => {
+    const type = req.query.type === 'sonder' ? 'sonder' : 'dienste';
+    db.get(
+        `SELECT datum, thema, dienstleiter, teilnehmer_count, sent_at
+         FROM anwesenheit_versand WHERE type = ? ORDER BY id DESC LIMIT 1`,
+        [type],
+        (err, row) => {
+            if (err) {
+                console.error('Fehler beim Laden des letzten Versands:', err.message);
+                return res.status(500).json({ error: 'Fehler beim Laden des Versandstatus.' });
+            }
+            res.json({ type, lastSent: row || null });
+        }
+    );
+});
+
 // E-Mail-Versand der Anwesenheitsliste
 app.post('/api/anwesenheit/email', async (req, res) => {
     console.log('[ANWESENHEIT EMAIL] ===== E-Mail-Anfrage gestartet =====');
@@ -1613,12 +1650,42 @@ app.post('/api/anwesenheit/email', async (req, res) => {
 
                 console.log('[ANWESENHEIT EMAIL] Sende E-Mail (BCC) an:', recipients);
 
-                await mailTransporter.sendMail(mailOptions);
+                const info = await mailTransporter.sendMail(mailOptions);
 
                 console.log('[ANWESENHEIT EMAIL] E-Mail erfolgreich versendet');
-                res.json({ success: true, message: 'E-Mail erfolgreich versendet' });
+
+                // Versand festhalten, damit die Seiten "zuletzt versendet" anzeigen können.
+                // Ein Fehler hier darf die erfolgreiche Antwort nicht verhindern.
+                const versandType = isSonder ? 'sonder' : 'dienste';
+                const teilnehmerCount = (Array.isArray(teilnehmer) ? teilnehmer : [])
+                    .filter(t => t && t.name && String(t.name).trim() !== '').length;
+                db.run(
+                    'INSERT INTO anwesenheit_versand (type, datum, thema, dienstleiter, teilnehmer_count) VALUES (?, ?, ?, ?, ?)',
+                    [versandType, datum, thema || '', dienstleiter || '', teilnehmerCount],
+                    (dbErr) => {
+                        if (dbErr) console.error('[ANWESENHEIT EMAIL] Versand konnte nicht protokolliert werden:', dbErr.message);
+                    }
+                );
+                debugLogPush({
+                    level: 'info',
+                    type: 'anwesenheit-email',
+                    versandType,
+                    datum,
+                    teilnehmerCount,
+                    messageId: info && info.messageId,
+                    device: classifyUserAgent(req.headers['user-agent'])
+                });
+
+                res.json({ success: true, message: 'E-Mail erfolgreich versendet', sentAt: new Date().toISOString() });
             } catch (emailError) {
                 console.error('[ANWESENHEIT EMAIL] Fehler beim Versenden:', emailError);
+                debugLogPush({
+                    level: 'error',
+                    type: 'anwesenheit-email-error',
+                    versandType: isSonder ? 'sonder' : 'dienste',
+                    datum,
+                    msg: emailError.message
+                });
                 res.status(500).json({ error: 'Fehler beim Versenden der E-Mail.' });
             }
         });
