@@ -17,11 +17,21 @@
   const POLL_INTERVAL_MS = 15000;
   const TIMEOUT_MS = 5000;
   const RECOVERED_SHOW_MS = 4000;
+  // Ein einzelner Fehlversuch löst noch kein rotes Banner aus: Beim Öffnen des
+  // Browsers / Aufwachen des Tablets ist das WLAN oft ein paar Sekunden weg.
+  // Erst wenn auch der Bestätigungs-Check fehlschlägt, gilt der Server als weg.
+  const FAILURES_BEFORE_OFFLINE = 2;
+  const CONFIRM_DELAY_MS = 3000;
+  const WAKE_DELAY_MS = 2000;      // nach Aufwachen/online-Event dem WLAN Zeit geben
+  const OFFLINE_RETRY_MS = 5000;   // im Offline-Zustand schneller erneut prüfen
 
-  let online = true;
+  let online = true;               // angezeigter Status (rotes Banner nur bei false)
+  let consecutiveFailures = 0;
+  let failureReported = false;     // eine Seite hat einen fehlgeschlagenen Aufruf gemeldet
   let offlineSince = null;
   let banner = null;
   let hideTimer = null;
+  let scheduledCheck = null;
   let checking = false;
   const reconnectCallbacks = [];
 
@@ -77,26 +87,58 @@
     hideTimer = setTimeout(() => { b.className = 'connection-banner'; }, RECOVERED_SHOW_MS);
   }
 
-  function setOnline(value, reason) {
-    if (value === online) {
-      // Offline-Text trotzdem aktualisieren (neuer Grund)
-      if (!value && reason) showOffline(reason);
-      return;
-    }
-    online = value;
-    if (!value) {
-      showOffline(reason);
-    } else {
+  function runReconnectCallbacks() {
+    reconnectCallbacks.forEach(cb => {
+      try { cb(); } catch (e) { console.error('onReconnect-Callback Fehler:', e); }
+    });
+  }
+
+  // Server hat geantwortet
+  function handleSuccess() {
+    consecutiveFailures = 0;
+    clearTimeout(scheduledCheck);
+    scheduledCheck = null;
+    if (!online) {
+      // Es war wirklich das rote Banner zu sehen → grün melden
+      online = true;
       showRecovered();
-      reconnectCallbacks.forEach(cb => {
-        try { cb(); } catch (e) { console.error('onReconnect-Callback Fehler:', e); }
-      });
+      failureReported = false;
+      runReconnectCallbacks();
+    } else if (failureReported) {
+      // Nur ein kurzer Aussetzer – kein Banner, aber ausstehende
+      // Speicherungen der Seite trotzdem nachholen lassen
+      failureReported = false;
+      runReconnectCallbacks();
     }
+  }
+
+  // Health-Check fehlgeschlagen
+  function handleFailure(reason) {
+    consecutiveFailures++;
+    if (consecutiveFailures >= FAILURES_BEFORE_OFFLINE) {
+      online = false;
+      showOffline(reason);
+      scheduleCheck(OFFLINE_RETRY_MS);
+    } else {
+      // Erst bestätigen, bevor Alarm geschlagen wird
+      scheduleCheck(CONFIRM_DELAY_MS);
+    }
+  }
+
+  // Einen Check einplanen. Ein bereits geplanter Check wird nicht nach hinten
+  // verschoben (sonst würde z. B. jede Eingabe den Check endlos verzögern).
+  function scheduleCheck(delayMs) {
+    if (scheduledCheck) return;
+    scheduledCheck = setTimeout(() => {
+      scheduledCheck = null;
+      check();
+    }, delayMs);
   }
 
   async function check() {
     if (checking) return;
     checking = true;
+    const startedAt = Date.now();
     const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
     const timer = controller ? setTimeout(() => controller.abort(), TIMEOUT_MS) : null;
     try {
@@ -104,10 +146,17 @@
         cache: 'no-store',
         signal: controller ? controller.signal : undefined
       });
-      if (res.ok) setOnline(true);
-      else setOnline(false, `Server antwortet mit Fehler ${res.status}`);
+      if (res.ok) handleSuccess();
+      else handleFailure(`Server antwortet mit Fehler ${res.status}`);
     } catch (e) {
-      setOnline(false, navigator.onLine === false ? 'Tablet ist offline' : 'keine Antwort vom Server');
+      const elapsed = Date.now() - startedAt;
+      if (e && e.name === 'AbortError' && elapsed > TIMEOUT_MS + 2000) {
+        // Der Tab war eingefroren (Tablet im Standby) und der Abbruch-Timer hat
+        // beim Aufwachen sofort gefeuert – das sagt nichts über den Server aus.
+        scheduleCheck(WAKE_DELAY_MS);
+      } else {
+        handleFailure(navigator.onLine === false ? 'Tablet ist offline' : 'keine Antwort vom Server');
+      }
     } finally {
       if (timer) clearTimeout(timer);
       checking = false;
@@ -115,12 +164,13 @@
   }
 
   window.ConnectionStatus = {
-    reportOk() { setOnline(true); },
+    reportOk() { handleSuccess(); },
     reportFailure(reason) {
-      setOnline(false, reason);
-      // Sofort gegenprüfen – ein einzelner Fehler kann auch ein Server-Fehler
-      // bei intaktem Netz sein; der Health-Check entscheidet.
-      check();
+      // Ein fehlgeschlagener Aufruf der Seite ist nur ein Verdacht – der
+      // Health-Check entscheidet (zweimal hintereinander fehlgeschlagen = offline).
+      failureReported = true;
+      if (!online && reason) showOffline(reason);
+      scheduleCheck(online ? 0 : OFFLINE_RETRY_MS);
     },
     onReconnect(cb) { if (typeof cb === 'function') reconnectCallbacks.push(cb); },
     isOnline() { return online; },
@@ -131,12 +181,15 @@
     injectStyles();
     ensureBanner();
     check();
-    setInterval(check, POLL_INTERVAL_MS);
-    window.addEventListener('online', check);
-    window.addEventListener('offline', () => setOnline(false, 'Tablet ist offline'));
-    // Tablet aus dem Standby geweckt → sofort prüfen
+    setInterval(() => {
+      // Im Hintergrund nicht prüfen – Android drosselt/friert Hintergrund-Tabs ein
+      if (document.visibilityState !== 'hidden') check();
+    }, POLL_INTERVAL_MS);
+    window.addEventListener('online', () => scheduleCheck(WAKE_DELAY_MS));
+    window.addEventListener('offline', () => scheduleCheck(CONFIRM_DELAY_MS));
+    // Tablet aus dem Standby geweckt / Browser geöffnet → kurz warten, dann prüfen
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') check();
+      if (document.visibilityState === 'visible') scheduleCheck(WAKE_DELAY_MS);
     });
   }
 
