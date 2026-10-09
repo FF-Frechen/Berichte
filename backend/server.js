@@ -1567,6 +1567,13 @@ app.post('/api/anwesenheit/pdf', async (req, res) => {
     }
 });
 
+// Ablage der zuletzt versendeten Anwesenheits-PDF (pro Typ genau eine Datei,
+// wird bei jedem Versand überschrieben)
+const anwesenheitPdfDir = path.join(pdfPath, 'anwesenheit');
+function lastAnwesenheitPdfPath(type) {
+    return path.join(anwesenheitPdfDir, type === 'sonder' ? 'letzte-sonder.pdf' : 'letzte-dienste.pdf');
+}
+
 // Letzter Versand einer Anwesenheitsliste (für die Anzeige auf den Dienst-Seiten)
 app.get('/api/anwesenheit/last-sent', (req, res) => {
     const type = req.query.type === 'sonder' ? 'sonder' : 'dienste';
@@ -1579,7 +1586,34 @@ app.get('/api/anwesenheit/last-sent', (req, res) => {
                 console.error('Fehler beim Laden des letzten Versands:', err.message);
                 return res.status(500).json({ error: 'Fehler beim Laden des Versandstatus.' });
             }
-            res.json({ type, lastSent: row || null });
+            const lastSent = row ? { ...row, hasPdf: fs.existsSync(lastAnwesenheitPdfPath(type)) } : null;
+            res.json({ type, lastSent });
+        }
+    );
+});
+
+// Zuletzt versendete Anwesenheits-PDF anzeigen (damit jeder prüfen kann, ob er eingetragen war)
+app.get('/api/anwesenheit/last-pdf', (req, res) => {
+    const type = req.query.type === 'sonder' ? 'sonder' : 'dienste';
+    const filePath = lastAnwesenheitPdfPath(type);
+    if (!fs.existsSync(filePath)) {
+        return res.status(404).json({ error: 'Es wurde noch keine Liste versendet.' });
+    }
+    db.get(
+        'SELECT datum FROM anwesenheit_versand WHERE type = ? ORDER BY id DESC LIMIT 1',
+        [type],
+        (err, row) => {
+            const datum = (row && row.datum ? String(row.datum) : 'letzte').replace(/[^0-9A-Za-z._-]/g, '_');
+            const filename = type === 'sonder' ? `Sonderdienst_${datum}.pdf` : `Anwesenheitsliste_${datum}.pdf`;
+            res.setHeader('Content-Type', 'application/pdf');
+            res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+            const stream = fs.createReadStream(filePath);
+            stream.on('error', (streamErr) => {
+                console.error('Fehler beim Lesen der Anwesenheits-PDF:', streamErr);
+                if (!res.headersSent) res.status(500).json({ error: 'PDF konnte nicht gelesen werden.' });
+                else res.end();
+            });
+            stream.pipe(res);
         }
     );
 });
@@ -1657,6 +1691,19 @@ app.post('/api/anwesenheit/email', async (req, res) => {
                 // Versand festhalten, damit die Seiten "zuletzt versendet" anzeigen können.
                 // Ein Fehler hier darf die erfolgreiche Antwort nicht verhindern.
                 const versandType = isSonder ? 'sonder' : 'dienste';
+
+                // Genau die versendete PDF als "letzte Liste" ablegen (überschreibt die vorige).
+                // Erst in .tmp schreiben, dann umbenennen – so wird nie eine halbe Datei ausgeliefert.
+                try {
+                    fs.mkdirSync(anwesenheitPdfDir, { recursive: true });
+                    const target = lastAnwesenheitPdfPath(versandType);
+                    fs.writeFileSync(target + '.tmp', pdfBuffer);
+                    fs.renameSync(target + '.tmp', target);
+                } catch (fileErr) {
+                    console.error('[ANWESENHEIT EMAIL] Letzte PDF konnte nicht gespeichert werden:', fileErr.message);
+                    debugLogPush({ level: 'error', type: 'anwesenheit-pdf-save-error', versandType, msg: fileErr.message });
+                }
+
                 const teilnehmerCount = (Array.isArray(teilnehmer) ? teilnehmer : [])
                     .filter(t => t && t.name && String(t.name).trim() !== '').length;
                 db.run(

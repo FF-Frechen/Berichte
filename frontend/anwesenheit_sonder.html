@@ -309,6 +309,14 @@
     .last-sent-box.sent { background-color: #d1e7dd; color: #0f5132; border-left-color: #198754; }
     .last-sent-box.not-sent { background-color: #fff3cd; color: #664d03; border-left-color: #ffc107; }
     .last-sent-box small { display: block; font-weight: normal; margin-top: 3px; }
+    .last-sent-pdf {
+      display: inline-block; margin: 10px 0 0; padding: 10px 16px; min-height: 44px;
+      background-color: #fff; color: #003049; border: 2px solid currentColor; border-radius: 5px;
+      font-size: 15px; font-weight: bold; cursor: pointer;
+    }
+    .last-sent-box.sent .last-sent-pdf { color: #0f5132; }
+    .last-sent-box.not-sent .last-sent-pdf { color: #664d03; }
+    .last-sent-pdf:hover, .last-sent-pdf:active { background-color: #f1f3f5; }
 
     @media print {
       .last-sent-box { display: none; }
@@ -643,6 +651,19 @@
           (details.length ? ' · ' + details.join(' · ') : '');
       }
       box.appendChild(small);
+
+      // Letzte versendete Liste ansehen – damit jeder prüfen kann, ob er eingetragen war
+      if (lastSentInfo.hasPdf) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'last-sent-pdf';
+        btn.textContent = '📄 Letzte Liste ansehen';
+        btn.addEventListener('click', () => {
+          const url = `${SERVER_URL}/anwesenheit/last-pdf?type=${PAGE_TYPE}&t=${encodeURIComponent(lastSentInfo.sent_at || '')}`;
+          window.open(url, '_blank');
+        });
+        box.appendChild(btn);
+      }
     }
 
     // Initialize with 1 empty row
