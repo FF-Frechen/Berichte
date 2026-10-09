@@ -40,8 +40,15 @@
     }
     button:active { transform: scale(0.98); }
     input:focus, select:focus, textarea:focus { outline: 3px solid #003049; outline-offset: 2px; }
+
+    /* Einsatznummer mit Barcode-Scan-Knopf */
+    .input-with-scan { display: flex; gap: 8px; align-items: stretch; }
+    .input-with-scan input { flex: 1; min-width: 0; }
+    .scan-button { margin: 0; padding: 0 14px; min-width: 56px; font-size: 22px; line-height: 1; }
+    .scan-hint { font-size: 13px; color: #6c757d; margin-top: 6px; }
   </style>
   <script src="/connection-status.js"></script>
+  <script src="/barcode-scanner.js"></script>
 </head>
 <body>
   <div class="container">
@@ -63,7 +70,11 @@
       </div>
       <div class="form-group">
         <label for="einsatznummer">Einsatznummer (nur Zahlen und Sonderzeichen) *</label>
-        <input type="text" id="einsatznummer" inputmode="numeric" placeholder="z.B. 2025-001" required>
+        <div class="input-with-scan">
+          <input type="text" id="einsatznummer" inputmode="numeric" placeholder="z.B. 2025-001" required>
+          <button type="button" class="scan-button hidden" id="scan-einsatznummer" title="Barcode scannen" aria-label="Einsatznummer per Kamera vom Barcode scannen">📷</button>
+        </div>
+        <div class="scan-hint hidden">Tipp: Die Einsatznummer kann mit 📷 direkt vom Barcode auf der Depesche gescannt werden.</div>
       </div>
       <div class="form-group">
         <label for="einsatzstelle">Einsatzstelle *</label>
@@ -92,7 +103,11 @@
         </div>
         <div class="form-group">
           <label for="load-einsatznummer">Oder Einsatznummer eingeben:</label>
-          <input type="text" id="load-einsatznummer" inputmode="numeric" placeholder="z.B. 2025-001">
+          <div class="input-with-scan">
+            <input type="text" id="load-einsatznummer" inputmode="numeric" placeholder="z.B. 2025-001">
+            <button type="button" class="scan-button hidden" id="scan-load-einsatznummer" title="Barcode scannen" aria-label="Einsatznummer per Kamera vom Barcode scannen">📷</button>
+          </div>
+          <div class="scan-hint hidden">Tipp: Barcode der Depesche mit 📷 scannen.</div>
         </div>
         <div class="buttons">
           <button id="load-einsatz-button">Einsatz laden</button>
@@ -154,6 +169,34 @@
         einsatznummerInput.addEventListener("keydown", preventInvalidKeys);
         loadEinsatznummerInput.addEventListener("input", restrictInput);
         loadEinsatznummerInput.addEventListener("keydown", preventInvalidKeys);
+
+        // Barcode-Scan der Einsatznummer (nur wenn Kamera nutzbar, d. h. HTTPS)
+        if (window.BarcodeScanner && BarcodeScanner.isSupported()) {
+            document.querySelectorAll('.scan-button, .scan-hint').forEach(el => el.classList.remove('hidden'));
+
+            // Gescannten Wert übernehmen – gleiche Bereinigung wie bei Tastatureingabe
+            function applyScannedValue(input, text) {
+                input.value = String(text).trim();
+                input.dispatchEvent(new Event('input', { bubbles: true }));
+                return input.value.trim();
+            }
+
+            document.getElementById("scan-einsatznummer").addEventListener("click", () => {
+                BarcodeScanner.open(text => {
+                    if (applyScannedValue(einsatznummerInput, text)) {
+                        checkEinsatznummer(); // Warnung, falls Einsatz schon existiert
+                    }
+                });
+            });
+
+            document.getElementById("scan-load-einsatznummer").addEventListener("click", () => {
+                BarcodeScanner.open(text => {
+                    if (applyScannedValue(loadEinsatznummerInput, text)) {
+                        loadEinsatz(); // direkt laden
+                    }
+                });
+            });
+        }
     });
 
     /**
